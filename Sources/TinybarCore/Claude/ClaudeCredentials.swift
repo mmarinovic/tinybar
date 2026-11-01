@@ -34,28 +34,36 @@ public struct ClaudeCredentials: Sendable {
     static let keychainService = "Claude Code-credentials"
 
     public static func hasStoredLogin() -> Bool {
-        if credentialFiles().contains(where: { FileManager.default.fileExists(atPath: $0.path) }) { return true }
-        // Attribute-only lookup: never touches the secret, never prompts.
+        !ClaudeAccount.discover().isEmpty
+    }
+
+    public static func load() throws -> ClaudeCredentials {
+        guard let account = ClaudeAccount.discover().first else { throw ProviderError.notConfigured }
+        return try load(account)
+    }
+
+    public static func load(_ account: ClaudeAccount) throws -> ClaudeCredentials {
+        if let data = try? Data(contentsOf: account.credentialsFile) { return try parse(data) }
+        for service in account.keychainServices {
+            if let data = try readKeychain(service: service) { return try parse(data) }
+        }
+        throw ProviderError.notConfigured
+    }
+
+    static func credentialFiles() -> [URL] {
+        Paths.claudeConfigDirs().map { $0.appendingPathComponent(".credentials.json") }
+    }
+
+    /// Attribute-only lookup: never touches the secret, never prompts.
+    static func keychainItemExists(service: String) -> Bool {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        p.arguments = ["find-generic-password", "-s", keychainService]
+        p.arguments = ["find-generic-password", "-s", service]
         p.standardOutput = FileHandle.nullDevice
         p.standardError = FileHandle.nullDevice
         do { try p.run() } catch { return false }
         p.waitUntilExit()
         return p.terminationStatus == 0
-    }
-
-    public static func load() throws -> ClaudeCredentials {
-        for file in credentialFiles() {
-            if let data = try? Data(contentsOf: file) { return try parse(data) }
-        }
-        guard let data = try readKeychain() else { throw ProviderError.notConfigured }
-        return try parse(data)
-    }
-
-    static func credentialFiles() -> [URL] {
-        Paths.claudeConfigDirs().map { $0.appendingPathComponent(".credentials.json") }
     }
 
     static func parse(_ data: Data) throws -> ClaudeCredentials {
@@ -72,10 +80,10 @@ public struct ClaudeCredentials: Sendable {
             rateLimitTier: oauth["rateLimitTier"] as? String)
     }
 
-    private static func readKeychain(timeout: TimeInterval = 5) throws -> Data? {
+    private static func readKeychain(service: String, timeout: TimeInterval = 5) throws -> Data? {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
-        p.arguments = ["find-generic-password", "-s", keychainService, "-w"]
+        p.arguments = ["find-generic-password", "-s", service, "-w"]
         let out = Pipe()
         p.standardOutput = out
         p.standardError = FileHandle.nullDevice

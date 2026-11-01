@@ -80,13 +80,37 @@ struct LimitRings: View {
 }
 
 extension ProviderSnapshot {
+    /// The logins this snapshot covers, in order; empty for a Provider with one.
+    var accounts: [String] {
+        var seen = Set<String>()
+        return windows.compactMap(\.account).filter { seen.insert($0).inserted }
+    }
+
+    /// One login's part of a multi-login snapshot, with its windows' titles unprefixed.
+    func scoped(to account: String) -> ProviderSnapshot {
+        var s = self
+        s.plan = accountPlans?[account]
+        s.windows = windows.filter { $0.account == account }.map { w in
+            var w = w
+            if w.title.hasPrefix("\(account) · ") { w.title.removeFirst(account.count + 3) }
+            return w
+        }
+        s.bankedResets = nil
+        s.extraUsage = nil
+        s.accountErrors = nil
+        return s
+    }
+
     private var generalWindows: [LimitWindow] {
         windows.filter { !$0.isModelSpecific }
     }
 
-    /// What the rings show: the account-wide windows, longest (outermost) first.
+    /// What the rings show: the account-wide windows, longest (outermost) first. With several
+    /// logins, those of the login closest to running out.
     var ringWindows: [LimitWindow] {
-        Array(generalWindows.sorted { ($0.durationSeconds ?? .max) > ($1.durationSeconds ?? .max) }.prefix(2))
+        let account = bindingWindow?.account
+        return Array(generalWindows.filter { $0.account == account }
+            .sorted { ($0.durationSeconds ?? .max) > ($1.durationSeconds ?? .max) }.prefix(2))
     }
 
     /// The account-wide window closest to running out; ties go to the one that resets first.

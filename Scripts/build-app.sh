@@ -9,7 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 swift build -c release --product Tinybar --arch arm64 --arch x86_64
-BIN=".build/apple/Products/Release/Tinybar"
+BIN="$(swift build -c release --product Tinybar --arch arm64 --arch x86_64 --show-bin-path)/Tinybar"
 
 APP="build/Tinybar.app"
 rm -rf "$APP"

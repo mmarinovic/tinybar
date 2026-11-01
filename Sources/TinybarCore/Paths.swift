@@ -17,19 +17,30 @@ public enum Paths {
         return home.appendingPathComponent(".codex", isDirectory: true)
     }
 
-    /// Claude Code config dirs: `CLAUDE_CONFIG_DIR` (comma-separated) or `~/.claude` and
-    /// `~/.config/claude`, whichever exist.
-    public static func claudeConfigDirs(env: [String: String] = ProcessInfo.processInfo.environment) -> [URL] {
-        if let custom = env["CLAUDE_CONFIG_DIR"]?.trimmingCharacters(in: .whitespaces), !custom.isEmpty {
-            return custom.split(separator: ",").map {
-                URL(fileURLWithPath: ($0.trimmingCharacters(in: .whitespaces) as NSString).expandingTildeInPath, isDirectory: true)
-            }
-        }
+    /// Claude Code config dirs: `CLAUDE_CONFIG_DIR` (comma-separated) and `~/.claude`,
+    /// `~/.config/claude` and every `~/.claude-*` dir (one per `CLAUDE_CONFIG_DIR` login), whichever exist.
+    public static func claudeConfigDirs(
+        env: [String: String] = ProcessInfo.processInfo.environment, home: URL = Paths.home
+    ) -> [URL] {
+        let custom = (env["CLAUDE_CONFIG_DIR"] ?? "").split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .map { URL(fileURLWithPath: ($0 as NSString).expandingTildeInPath, isDirectory: true).standardizedFileURL }
+        let fm = FileManager.default
         let candidates = [
             home.appendingPathComponent(".claude", isDirectory: true),
             home.appendingPathComponent(".config/claude", isDirectory: true),
         ]
-        let existing = candidates.filter { FileManager.default.fileExists(atPath: $0.path) }
-        return existing.isEmpty ? [candidates[0]] : existing
+        let extra = ((try? fm.contentsOfDirectory(atPath: home.path)) ?? [])
+            .filter { $0.hasPrefix(".claude-") }
+            .sorted()
+            .map { home.appendingPathComponent($0, isDirectory: true) }
+        let existing = (candidates + extra).filter {
+            var isDir: ObjCBool = false
+            return fm.fileExists(atPath: $0.path, isDirectory: &isDir) && isDir.boolValue
+        }
+        var seen = Set<String>()
+        let all = (custom + existing).filter { seen.insert($0.path).inserted }
+        return all.isEmpty ? [candidates[0]] : all
     }
 }
