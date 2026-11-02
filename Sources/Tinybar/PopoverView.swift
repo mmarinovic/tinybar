@@ -238,11 +238,16 @@ private struct OverviewPage: View {
             if model.enabledProviders.isEmpty {
                 EmptyState()
             } else {
+                let rows = model.enabledProviders.flatMap { id -> [OverviewRowKey] in
+                    let accounts = model.providers[id]?.snapshot?.accounts ?? []
+                    return accounts.isEmpty ? [OverviewRowKey(id: id, account: nil)]
+                        : accounts.map { OverviewRowKey(id: id, account: $0) }
+                }
                 VStack(spacing: 0) {
-                    ForEach(model.enabledProviders, id: \.self) { id in
-                        Button { open(id) } label: { OverviewRow(model: model, id: id) }
+                    ForEach(rows, id: \.self) { row in
+                        Button { open(row.id) } label: { OverviewRow(model: model, id: row.id, account: row.account) }
                             .buttonStyle(RowButtonStyle())
-                        if id != model.enabledProviders.last {
+                        if row != rows.last {
                             Divider().padding(.leading, 64).padding(.trailing, 12).opacity(0.5)
                         }
                     }
@@ -254,15 +259,21 @@ private struct OverviewPage: View {
     }
 }
 
+private struct OverviewRowKey: Hashable {
+    let id: ProviderID
+    let account: String?
+}
+
 /// One subscription at a glance: its rings, the limit closest to running out and when that
-/// resets. The whole row opens the detail page.
+/// resets. The whole row opens the detail page. A Provider with several logins gets one per login.
 private struct OverviewRow: View {
     let model: AppModel
     let id: ProviderID
+    var account: String? = nil
 
     var body: some View {
         let state = model.providers[id]
-        let snapshot = state?.snapshot
+        let snapshot = account.flatMap { state?.snapshot?.scoped(to: $0) } ?? state?.snapshot
         let stale = state?.isStale ?? false
         let binding = (stale ? nil : snapshot?.firstRunOut(includeModelSpecific: false)?.window) ?? snapshot?.bindingWindow
 
@@ -271,11 +282,12 @@ private struct OverviewRow: View {
                 .frame(width: 38, height: 38)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 6) {
-                    Text(id.displayName).font(.system(size: 14, weight: .semibold))
+                    Text(account.map { "\(id.displayName) \($0)" } ?? id.displayName)
+                        .font(.system(size: 14, weight: .semibold))
                     if let plan = snapshot?.plan {
                         Text(plan).font(.system(size: 12)).foregroundStyle(.secondary)
                     }
-                    if model.pinned?.0 == id {
+                    if model.pinned?.0 == id, model.pinned?.1.account == account {
                         Image(systemName: "pin.fill")
                             .font(.system(size: 9))
                             .foregroundStyle(.tertiary)
@@ -412,6 +424,17 @@ private struct ProviderPage: View {
                     }
                 }
                 .platter(cornerRadius: 16)
+            }
+
+            if let errors = snapshot?.accountErrors, !errors.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    ForEach(errors, id: \.self) { Text($0) }
+                }
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
             }
 
             if let snapshot, snapshot.hasExtras {

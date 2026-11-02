@@ -57,11 +57,14 @@ public struct LimitWindow: Codable, Sendable, Hashable, Identifiable {
     public var resetsAt: Date?
     public var durationSeconds: Int?
     public var isModelSpecific: Bool
+    /// The login this window belongs to when a Provider has several, e.g. "work".
+    public var account: String?
 
     public init(
         id: String, title: String, usedPercent: Double, resetsAt: Date?,
-        durationSeconds: Int?, isModelSpecific: Bool = false)
+        durationSeconds: Int?, isModelSpecific: Bool = false, account: String? = nil)
     {
+        self.account = account
         self.id = id
         self.title = title
         self.usedPercent = usedPercent
@@ -164,12 +167,17 @@ public struct ProviderSnapshot: Codable, Sendable, Hashable {
     public var extraUsage: ExtraUsageSpend?
     public var source: DataSource
     public var fetchedAt: Date
+    /// Logins of this Provider that could not be read, e.g. "marko: Login expired".
+    public var accountErrors: [String]?
+    /// Each login's plan, by label, when a Provider has several.
+    public var accountPlans: [String: String]?
 
     public init(
         provider: ProviderID, plan: String?, windows: [LimitWindow],
         credits: Credits? = nil, bankedResets: [BankedReset]? = nil, extraUsage: ExtraUsageSpend? = nil,
-        source: DataSource = .cli, fetchedAt: Date = Date())
+        source: DataSource = .cli, fetchedAt: Date = Date(), accountErrors: [String]? = nil)
     {
+        self.accountErrors = accountErrors
         self.provider = provider
         self.plan = plan
         self.windows = windows

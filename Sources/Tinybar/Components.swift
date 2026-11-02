@@ -80,13 +80,47 @@ struct LimitRings: View {
 }
 
 extension ProviderSnapshot {
+    /// The logins this snapshot covers, most weekly limit left first, then the soonest weekly
+    /// reset; empty for a Provider with one.
+    var accounts: [String] {
+        var seen = Set<String>()
+        let labels = windows.compactMap(\.account).filter { seen.insert($0).inserted }
+        func weekly(_ account: String) -> LimitWindow? {
+            windows.first { $0.account == account && $0.kind == .weekly && !$0.isModelSpecific }
+        }
+        return labels.sorted { a, b in
+            let wa = weekly(a), wb = weekly(b)
+            let left = (wa?.remainingPercent ?? -1, wb?.remainingPercent ?? -1)
+            if left.0 != left.1 { return left.0 > left.1 }
+            return (wa?.resetsAt ?? .distantFuture) < (wb?.resetsAt ?? .distantFuture)
+        }
+    }
+
+    /// One login's part of a multi-login snapshot, with its windows' titles unprefixed.
+    func scoped(to account: String) -> ProviderSnapshot {
+        var s = self
+        s.plan = accountPlans?[account]
+        s.windows = windows.filter { $0.account == account }.map { w in
+            var w = w
+            if w.title.hasPrefix("\(account) · ") { w.title.removeFirst(account.count + 3) }
+            return w
+        }
+        s.bankedResets = nil
+        s.extraUsage = nil
+        s.accountErrors = nil
+        return s
+    }
+
     private var generalWindows: [LimitWindow] {
         windows.filter { !$0.isModelSpecific }
     }
 
-    /// What the rings show: the account-wide windows, longest (outermost) first.
+    /// What the rings show: the account-wide windows, longest (outermost) first. With several
+    /// logins, those of the login closest to running out.
     var ringWindows: [LimitWindow] {
-        Array(generalWindows.sorted { ($0.durationSeconds ?? .max) > ($1.durationSeconds ?? .max) }.prefix(2))
+        let account = bindingWindow?.account
+        return Array(generalWindows.filter { $0.account == account }
+            .sorted { ($0.durationSeconds ?? .max) > ($1.durationSeconds ?? .max) }.prefix(2))
     }
 
     /// The account-wide window closest to running out; ties go to the one that resets first.
