@@ -1,5 +1,5 @@
-// Draws Resources/AppIcon.icns: the menu bar ring, grown up. Two concentric rings, like a
-// Provider's rings in the popover: the outer (weekly) mostly left, the inner (5-hour) less so.
+// Draws Resources/AppIcon.icns: the menu bar icon, grown up. Two concentric black rings on white,
+// like a Provider's rings in the popover: the outer (weekly) mostly left, the inner (5-hour) less so.
 // Run from the repo root: swift Scripts/make-icon.swift
 import AppKit
 
@@ -58,22 +58,22 @@ func render() -> NSBitmapImageRep {
     let shape = CGPath(roundedRect: body, cornerWidth: 185, cornerHeight: 185, transform: nil)
     cg.saveGState()
     cg.setShadow(offset: CGSize(width: 0, height: -12), blur: 28, color: NSColor(white: 0, alpha: 0.3).cgColor)
-    cg.addPath(shape); cg.setFillColor(color(0xF4F5F8).cgColor); cg.fillPath()
+    cg.addPath(shape); cg.setFillColor(color(0xFFFFFF).cgColor); cg.fillPath()
     cg.restoreGState()
 
     cg.saveGState()
     cg.addPath(shape); cg.clip()
     let bg = CGGradient(colorsSpace: CGColorSpace(name: CGColorSpace.sRGB),
-                        colors: [color(0xFFFFFF).cgColor, color(0xE3E5EB).cgColor] as CFArray,
+                        colors: [color(0xFFFFFF).cgColor, color(0xEDEDED).cgColor] as CFArray,
                         locations: [0, 1])!
     cg.drawLinearGradient(bg, start: CGPoint(x: 0, y: body.maxY), end: CGPoint(x: 0, y: body.minY), options: [])
     // A bright rim where light catches the top edge.
     cg.addPath(shape); cg.setStrokeColor(NSColor(white: 1, alpha: 0.9).cgColor); cg.setLineWidth(6); cg.strokePath()
 
-    ring(cg, radius: 262, width: 96, fraction: 0.74,
-         from: color(0xF2A06A), to: color(0xD9572F), track: color(0x1B1D24, 0.07))
-    ring(cg, radius: 142, width: 76, fraction: 0.42,
-         from: color(0x6AB6FF), to: color(0x2F6FE0), track: color(0x1B1D24, 0.07))
+    ring(cg, radius: 262, width: 96, fraction: 0.8,
+         from: color(0x000000), to: color(0x000000), track: color(0x000000, 0.08))
+    ring(cg, radius: 142, width: 76, fraction: 0.55,
+         from: color(0x000000), to: color(0x000000), track: color(0x000000, 0.08))
     cg.restoreGState()
 
     NSGraphicsContext.restoreGraphicsState()

@@ -26,14 +26,6 @@ _Avoid_: ETA, prediction, burn rate
 A saved reset the user holds (a Codex reset coupon, a Claude "Reset for free" grant), which can be redeemed to reset a Limit Window early. Tinybar only displays it and never redeems it.
 _Avoid_: Reset credit, rollover
 
-**Pinned Limit**:
-The single Limit Window the user picked in the popover to show in the menu bar. Without one, the menu bar shows Auto: the account-wide window that runs out first.
-_Avoid_: Primary limit, featured limit
-
-**Incident**:
-A problem a Provider reports on its own public status page that affects the parts Tinybar's users rely on (for Claude: claude.ai, the API and Claude Code), from degraded service to a major outage, or maintenance in progress.
-_Avoid_: Outage (it's one severity), downtime, alert
-
 **Limit Alert**:
 A macOS notification sent when a 5-hour or weekly Limit Window crosses 90% or 95% used, or when it Resets after having crossed 90%.
 _Avoid_: Warning, reminder
@@ -63,14 +55,6 @@ _Avoid_: Spend, cost, bill
 **Long-context Price**:
 The higher API price a Provider charges for a whole request whose context is over a size (272K tokens for current GPT models).
 _Avoid_: Tier pricing, surcharge
-
-**Plan Value**:
-What a subscription's weekly Limit Window would cost at the Provider's API prices, measured from the user's own limits and logs: Theoretical Cost since the window started ÷ share used. It is a floor, because use outside the logged CLIs takes up the limit too.
-_Avoid_: Worth, ROI, savings
-
-**Benchmark Task**:
-One job from the Artificial Analysis Intelligence Index, which that benchmark prices and times per model. It describes the benchmark, not the user's work.
-_Avoid_: Task (alone), job
 
 ### Activity
 
