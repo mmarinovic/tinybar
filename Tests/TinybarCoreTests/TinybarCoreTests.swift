@@ -267,3 +267,14 @@ private func fiveHour(used: Double, elapsedHours: Double, asOf: Date) -> LimitWi
     #expect(events.first?.values[StatKey.linesAdded] == 5)
     #expect(events.first?.values[StatKey.tool("Edit")] == 1)
 }
+
+@Test func limitPercentagesKeepSliversVisible() {
+    #expect(Format.percent(100) == "100%")
+    #expect(Format.percent(99.7) == "99%")
+    #expect(Format.percent(62.4) == "62%")
+    #expect(Format.percent(62.5) == "63%")
+    #expect(Format.percent(0.3) == "1%")
+    #expect(Format.percent(0) == "0%")
+    #expect(Format.percent(-4) == "0%")
+    #expect(Format.percent(140) == "100%")
+}

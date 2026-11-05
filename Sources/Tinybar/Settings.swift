@@ -9,14 +9,6 @@ import TinybarCore
 final class Settings {
     private let defaults = UserDefaults.standard
 
-    var pinnedLimit: String? {
-        didSet { defaults.set(pinnedLimit, forKey: "pinnedLimit") }
-    }
-
-    var hidePercentage: Bool {
-        didSet { defaults.set(hidePercentage, forKey: "hidePercentage") }
-    }
-
     var notificationsEnabled: Bool {
         didSet { defaults.set(notificationsEnabled, forKey: "notificationsEnabled") }
     }
@@ -29,9 +21,7 @@ final class Settings {
     }
 
     init() {
-        defaults.register(defaults: ["notificationsEnabled": true, "hidePercentage": false])
-        pinnedLimit = defaults.string(forKey: "pinnedLimit")
-        hidePercentage = defaults.bool(forKey: "hidePercentage")
+        defaults.register(defaults: ["notificationsEnabled": true])
         notificationsEnabled = defaults.bool(forKey: "notificationsEnabled")
         launchAtLogin = SMAppService.mainApp.status == .enabled
 

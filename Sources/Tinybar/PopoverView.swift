@@ -6,11 +6,9 @@ enum Page: Hashable {
     case overview
     case provider(ProviderID)
     case settings
-    /// How Tinybar counts: where each number comes from.
-    case about
 
-    /// Pages reached from the footer: they replace the tab bar with a header and a way back.
-    var isAside: Bool { self == .settings || self == .about }
+    /// Reached from the footer: replaces the tab bar with a header and a way back.
+    var isAside: Bool { self == .settings }
 }
 
 /// The pages sit side by side on one strip that slides under a fixed window. Switching tabs moves
@@ -31,7 +29,7 @@ struct PopoverView: View {
     }
 
     private var pages: [Page] {
-        [.overview] + model.enabledProviders.map(Page.provider) + [.settings, .about]
+        [.overview] + model.enabledProviders.map(Page.provider) + [.settings]
     }
 
     var body: some View {
@@ -40,7 +38,7 @@ struct PopoverView: View {
                 TabBar(model: model, page: page, select: go)
                     .opacity(page.isAside ? 0 : 1)
                     .allowsHitTesting(!page.isAside)
-                AsideHeader(title: page == .about ? "How Tinybar counts" : "Settings") { go(.overview) }
+                AsideHeader(title: "Settings") { go(.overview) }
                     .opacity(page.isAside ? 1 : 0)
                     .allowsHitTesting(page.isAside)
             }
@@ -82,7 +80,6 @@ struct PopoverView: View {
         case .overview: OverviewPage(model: model, open: { go(.provider($0)) })
         case let .provider(id): ProviderPage(model: model, id: id)
         case .settings: SettingsPage(model: model)
-        case .about: AboutPage(model: model, visible: page == .about)
         }
     }
 
@@ -248,7 +245,7 @@ private struct OverviewPage: View {
                         Button { open(row.id) } label: { OverviewRow(model: model, id: row.id, account: row.account) }
                             .buttonStyle(RowButtonStyle())
                         if row != rows.last {
-                            Divider().padding(.leading, 64).padding(.trailing, 12).opacity(0.5)
+                            Divider().padding(.leading, 58).padding(.trailing, 12).opacity(0.5)
                         }
                     }
                 }
@@ -264,7 +261,7 @@ private struct OverviewRowKey: Hashable {
     let account: String?
 }
 
-/// One subscription at a glance: its rings, the limit closest to running out and when that
+/// One subscription at a glance: its rings, what is left of its tightest limit and when that
 /// resets. The whole row opens the detail page. A Provider with several logins gets one per login.
 private struct OverviewRow: View {
     let model: AppModel
@@ -278,39 +275,37 @@ private struct OverviewRow: View {
         let binding = (stale ? nil : snapshot?.firstRunOut(includeModelSpecific: false)?.window) ?? snapshot?.bindingWindow
 
         HStack(spacing: 12) {
-            LimitRings(windows: snapshot?.ringWindows ?? [], provider: id, lineWidth: 4, gap: 1.5, dimmed: stale)
-                .frame(width: 38, height: 38)
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
+            LimitRings(windows: snapshot?.ringWindows ?? [], lineWidth: 3.5, gap: 1.5, dimmed: stale)
+                .frame(width: 34, height: 34)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 6) {
                     Text(account.map { "\(id.displayName) \($0)" } ?? id.displayName)
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: 13, weight: .semibold))
+                        .truncationMode(.middle)
                     if let plan = snapshot?.plan {
-                        Text(plan).font(.system(size: 12)).foregroundStyle(.secondary)
-                    }
-                    if model.pinned?.0 == id, model.pinned?.1.account == account {
-                        Image(systemName: "pin.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.tertiary)
-                            .help(model.isAuto ? "Shown in the menu bar: it's the closest to running out" : "Pinned to the menu bar")
-                            .accessibilityLabel("Shown in the menu bar")
+                        Text(plan)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
                     }
                 }
+                .lineLimit(1)
                 subtitle(state: state, snapshot: snapshot, binding: binding)
-                    .font(.system(size: 12))
+                    .font(.system(size: 11).monospacedDigit())
                     .lineLimit(1)
             }
             Spacer(minLength: 8)
             if let binding {
-                PercentText(percent: binding.remainingPercent, size: 20)
+                PercentText(percent: binding.remainingPercent, size: 15)
+                    .frame(minWidth: 44, alignment: .trailing)
                     .opacity(stale ? 0.5 : 1)
             } else if snapshot == nil, state?.error == nil {
                 ProgressView().controlSize(.small)
             }
             Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .semibold))
+                .font(.system(size: 9, weight: .semibold))
                 .foregroundStyle(.quaternary)
         }
-        .padding(.vertical, 10)
+        .padding(.vertical, 9)
         .padding(.horizontal, 12)
         .contentShape(Rectangle())
     }
@@ -318,19 +313,13 @@ private struct OverviewRow: View {
     @ViewBuilder
     private func subtitle(state: ProviderState?, snapshot: ProviderSnapshot?, binding: LimitWindow?) -> some View {
         if let error = state?.error {
-            Label(StaleText.short(id: id, error: error), systemImage: "exclamationmark.triangle.fill")
+            Label(StaleText.short(id: id, error: error), systemImage: "exclamationmark.triangle")
                 .labelStyle(TightLabel())
-                .foregroundStyle(.orange)
-        } else if let incident = model.incidents[id]?.first {
-            HStack(spacing: 3) {
-                StatusLight(severity: incident.severity, size: 5)
-                Text(incident.title)
-            }
-            .foregroundStyle(incident.severity == .maintenance ? AnyShapeStyle(.secondary) : AnyShapeStyle(incident.severity.color))
-            .help(incident.summary)
+                .foregroundStyle(.secondary)
         } else if let runOut = snapshot?.firstRunOut(includeModelSpecific: false) {
             Text("\(runOut.window.title) runs out in \(Format.countdown(to: runOut.at))")
-                .foregroundStyle(.orange)
+                .fontWeight(.semibold)
+                .foregroundStyle(.primary)
         } else if let binding {
             Text(ResetText.short(binding)).foregroundStyle(.secondary)
         } else if state?.snapshot != nil {
@@ -354,10 +343,10 @@ private struct TightLabel: LabelStyle {
 private struct EmptyState: View {
     var body: some View {
         VStack(spacing: 8) {
-            LimitRings(windows: [], provider: nil, lineWidth: 5)
+            LimitRings(windows: [], lineWidth: 5)
                 .frame(width: 44, height: 44)
             Text("No subscriptions found").font(.system(size: 13, weight: .semibold))
-            Text("Sign in with `claude`, `codex` or `agy`, or open Cursor. Tinybar picks them up on its next check.")
+            Text("Sign in with `claude`, `codex` or `agy`, or open Cursor. They show up on the next check.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -383,7 +372,7 @@ enum StaleText {
         switch error {
         case .loginExpired, .notConfigured:
             "Login expired. To refresh it, \(id.loginHint.replacingOccurrences(of: " once to refresh", with: " once"))."
-        case .rateLimited: "\(id.displayName) asked Tinybar to slow down. It tries again on the next check."
+        case .rateLimited: "\(id.displayName) asked to slow down. Trying again on the next check."
         case let .network(message): "Couldn't reach \(id.displayName): \(message)"
         case let .unexpected(message): message
         }
@@ -404,8 +393,6 @@ private struct ProviderPage: View {
         VStack(alignment: .leading, spacing: 14) {
             Hero(id: id, state: state)
 
-            ForEach(model.incidents[id] ?? [], id: \.self) { IncidentBanner(incident: $0) }
-
             if let error = state?.error {
                 StaleBanner(id: id, error: error, since: snapshot?.fetchedAt)
             }
@@ -414,10 +401,9 @@ private struct ProviderPage: View {
                 VStack(spacing: 0) {
                     ForEach(windows) { window in
                         WindowRow(
-                            window: window, provider: id,
+                            window: window,
                             runOut: stale ? nil : snapshot.flatMap { window.runOutTime(asOf: $0.fetchedAt) },
-                            pinned: model.isPinned(id, window), auto: model.isAuto, dimmed: stale
-                        ) { model.pin(id, window) }
+                            dimmed: stale)
                         if window.id != windows.last?.id {
                             Divider().padding(.horizontal, 14).opacity(0.5)
                         }
@@ -434,7 +420,7 @@ private struct ProviderPage: View {
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(12)
-                .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .platter()
             }
 
             if let snapshot, snapshot.hasExtras {
@@ -448,7 +434,7 @@ private struct ProviderPage: View {
     }
 }
 
-/// The detail page's one large element: the rings, with the tightest limit set beside them.
+/// The detail page's one large element: the rings, with the tightest limit set inside them.
 private struct Hero: View {
     let id: ProviderID
     let state: ProviderState?
@@ -459,67 +445,31 @@ private struct Hero: View {
         HStack(spacing: 16) {
             ZStack {
                 LimitRings(
-                    windows: snapshot?.ringWindows ?? [], provider: id,
-                    lineWidth: 9, gap: 3, dimmed: state?.isStale ?? false)
+                    windows: snapshot?.ringWindows ?? [],
+                    lineWidth: 8, gap: 3, dimmed: state?.isStale ?? false)
                 if let binding {
-                    PercentText(percent: binding.remainingPercent, size: 17)
+                    PercentText(percent: binding.remainingPercent, size: 16)
                 }
             }
-            .frame(width: 92, height: 92)
+            .frame(width: 88, height: 88)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(id.displayName)
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .tracking(-0.4)
+                    .font(.system(size: 20, weight: .bold))
+                    .tracking(-0.3)
                 if let plan = snapshot?.plan {
-                    Text(plan).font(.system(size: 13, weight: .medium)).foregroundStyle(.secondary)
+                    Text(plan).font(.system(size: 12, weight: .medium)).foregroundStyle(.secondary)
+                }
+                if let binding {
+                    Text("\(binding.title) is the tightest")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
                 }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 4)
         .padding(.top, 4)
-    }
-}
-
-/// The provider's own word on an outage. Opens the incident on its status page.
-private struct IncidentBanner: View {
-    let incident: Incident
-
-    var body: some View {
-        Button { NSWorkspace.shared.open(incident.url) } label: {
-            HStack(alignment: .top, spacing: 8) {
-                StatusLight(severity: incident.severity, size: 7)
-                    .padding(.top, 1)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(incident.title)
-                        .font(.system(size: 12, weight: .semibold))
-                        .fixedSize(horizontal: false, vertical: true)
-                    Text(incident.summary)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                    if let updated = incident.updatedAt {
-                        Text("Updated \(updated.formatted(date: Calendar.current.isDateInToday(updated) ? .omitted : .abbreviated, time: .shortened)) on \(incident.page)")
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                Spacer(minLength: 4)
-                Image(systemName: "arrow.up.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-                    .padding(.top, 2)
-            }
-            .font(.system(size: 12))
-            .multilineTextAlignment(.leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.vertical, 11)
-            .padding(.leading, 9)
-            .padding(.trailing, 12)
-            .background(incident.severity.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-        }
-        .buttonStyle(PressScale())
-        .help("Open on \(incident.page)")
     }
 }
 
@@ -530,8 +480,8 @@ private struct StaleBanner: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+            Image(systemName: "exclamationmark.triangle")
+                .foregroundStyle(.primary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(StaleText.long(id: id, error: error))
                     .fixedSize(horizontal: false, vertical: true)
@@ -544,70 +494,50 @@ private struct StaleBanner: View {
         .font(.system(size: 12))
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(.orange.opacity(0.1), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .platter()
     }
 }
 
-/// One Limit Window. Clicking it pins it to the menu bar.
+/// One Limit Window: what is left, a bar, and when it resets or runs out.
 private struct WindowRow: View {
     let window: LimitWindow
-    let provider: ProviderID
     /// When the window runs out at its pace so far, before or after its reset.
     let runOut: Date?
-    let pinned: Bool
-    /// Shown because it's the closest to running out, not because the user pinned it.
-    let auto: Bool
     let dimmed: Bool
-    let onPin: () -> Void
 
     var body: some View {
-        Button(action: onPin) {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text(window.title).font(.system(size: 13, weight: .medium))
-                    Image(systemName: pinned ? "pin.fill" : "pin")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(pinned && !auto ? AnyShapeStyle(provider.color)
-                            : pinned ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.quaternary))
-                    Spacer()
-                    PercentText(percent: window.remainingPercent, size: 17)
-                }
-                RemainingBar(fraction: window.remainingPercent / 100, provider: provider)
-                if let resetsAt = window.resetsAt {
-                    HStack {
-                        Text(ResetText.long(resetsAt)).foregroundStyle(.secondary)
-                        Spacer(minLength: 8)
-                        if let runOut {
-                            if window.runsOutBeforeReset(runOut) {
-                                Text("Runs out in \(Format.countdown(to: runOut))")
-                                    .fontWeight(.medium)
-                                    .foregroundStyle(.orange)
-                            } else {
-                                Text("Runs out in \(Format.countdown(to: runOut))")
-                                    .foregroundStyle(.tertiary)
-                            }
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(window.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                PercentText(percent: window.remainingPercent, size: 15, suffix: true)
+            }
+            RemainingBar(fraction: window.remainingPercent / 100)
+            if let resetsAt = window.resetsAt {
+                HStack {
+                    Text(ResetText.long(resetsAt)).foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    if let runOut {
+                        if window.runsOutBeforeReset(runOut) {
+                            Text("Runs out in \(Format.countdown(to: runOut))")
+                                .fontWeight(.semibold)
+                                .foregroundStyle(.primary)
+                        } else {
+                            Text("Runs out in \(Format.countdown(to: runOut))")
+                                .foregroundStyle(.tertiary)
                         }
                     }
-                    .font(.system(size: 11).monospacedDigit())
-                    .lineLimit(1)
                 }
+                .font(.system(size: 11).monospacedDigit())
+                .lineLimit(1)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(RowButtonStyle())
+        .padding(.horizontal, 14)
+        .padding(.vertical, 11)
         .opacity(dimmed ? 0.55 : 1)
-        .help(help)
-        .accessibilityHint(help)
-    }
-
-    private var help: String {
-        switch (pinned, auto) {
-        case (true, true): "In the menu bar because it's the closest to running out. Click to keep it there."
-        case (true, false): "Pinned to the menu bar. Click to show whichever limit is closest to running out."
-        default: "Click to pin to the menu bar"
-        }
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -649,7 +579,7 @@ private struct Extras: View {
         HStack(spacing: 10) {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(snapshot.provider.color)
+                .foregroundStyle(.secondary)
                 .frame(width: 16)
             Text(title)
             Spacer()
@@ -747,20 +677,16 @@ private struct Footer: View {
 
     var body: some View {
         HStack(spacing: 6) {
-            if model.updater.release != nil {
-                UpdatePill(updater: model.updater)
-            } else {
-                Group {
-                    if model.isRefreshing {
-                        Text("Checking…")
-                    } else if let updated = model.lastUpdated {
-                        Text("Checked \(updated.formatted(date: .omitted, time: .shortened))")
-                    }
+            Group {
+                if model.isRefreshing {
+                    Text("Checking…")
+                } else if let updated = model.lastUpdated {
+                    Text("Checked \(updated.formatted(date: .omitted, time: .shortened))")
                 }
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .padding(.leading, 6)
             }
+            .font(.system(size: 11).monospacedDigit())
+            .foregroundStyle(.secondary)
+            .padding(.leading, 6)
             Spacer()
             FooterButton(icon: "arrow.clockwise", label: "Check now") {
                 Task { await model.refresh(force: false, throttle: AppModel.openThrottle) }
@@ -769,77 +695,15 @@ private struct Footer: View {
             .keyboardShortcut("r")
             FooterButton(icon: "chart.bar.xaxis", label: "Stats") { model.openStats() }
                 .keyboardShortcut("s")
-            FooterButton(icon: "info.circle", label: "How Tinybar counts") {
-                select(page == .about ? .overview : .about)
-            }
-            .keyboardShortcut("i")
             FooterButton(icon: "gearshape", label: "Settings") {
                 select(page == .settings ? .overview : .settings)
             }
             .keyboardShortcut(",")
-            FooterButton(icon: "power", label: "Quit Tinybar") { NSApp.terminate(nil) }
+            FooterButton(icon: "power", label: "Quit") { NSApp.terminate(nil) }
                 .keyboardShortcut("q")
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
-    }
-}
-
-/// Takes the footer's status slot while a newer Tinybar exists: one click installs it.
-private struct UpdatePill: View {
-    let updater: Updater
-    @State private var copied = false
-
-    var body: some View {
-        Button(action: act) {
-            HStack(spacing: 5) {
-                switch updater.state {
-                case .preparing:
-                    ProgressView().controlSize(.mini).scaleEffect(0.8).frame(width: 12, height: 12)
-                    Text("Updating…")
-                case .failed:
-                    Image(systemName: "exclamationmark.triangle.fill").font(.system(size: 10))
-                    Text(copied ? "Command copied" : "Update failed")
-                default:
-                    Image(systemName: "arrow.down.circle.fill").font(.system(size: 12))
-                    Text("Update to \(updater.release?.version ?? "")")
-                }
-            }
-            .font(.system(size: 11, weight: .semibold))
-            .foregroundStyle(tint)
-            .padding(.leading, 7)
-            .padding(.trailing, 10)
-            .frame(height: 24)
-            .background(Capsule().fill(tint.opacity(0.14)))
-            .contentShape(Capsule())
-        }
-        .buttonStyle(PressScale())
-        .disabled({ if case .preparing = updater.state { true } else { false } }())
-        .help(help)
-        .accessibilityLabel(help)
-    }
-
-    private var tint: Color {
-        if case .failed = updater.state { .orange } else { .accentColor }
-    }
-
-    private var help: String {
-        switch updater.state {
-        case .preparing: "Downloading with Homebrew. Tinybar restarts when it's ready."
-        case let .failed(_, reason): "\(reason) Click to copy the command to run in Terminal: \(Updater.command)"
-        default: updater.installsWithHomebrew
-            ? "Install Tinybar \(updater.release?.version ?? "") and restart"
-            : "Open the download page for Tinybar \(updater.release?.version ?? "")"
-        }
-    }
-
-    private func act() {
-        if case .failed = updater.state {
-            updater.copyCommand()
-            copied = true
-        } else {
-            updater.install()
-        }
     }
 }
 
@@ -859,29 +723,6 @@ private struct FooterButton: View {
         .foregroundStyle(.secondary)
         .help(label)
         .accessibilityLabel(label)
-    }
-}
-
-// MARK: About
-
-/// How Tinybar counts, with how much of the last 30 days' tokens Activity was counted from. That
-/// share is read only while the page is showing.
-private struct AboutPage: View {
-    let model: AppModel
-    let visible: Bool
-    @State private var coverage: [ProviderID: Double] = [:]
-
-    var body: some View {
-        CountingNotes(coverage: coverage, range: .month)
-            .padding(14)
-            .platter()
-            .padding(.top, 4)
-            .task(id: "\(visible)|\(model.lastUpdated?.timeIntervalSince1970 ?? 0)|\(model.isRefreshing)") {
-                guard visible, !model.isRefreshing else { return }
-                let next = await model.statsSummary(.month)
-                guard !Task.isCancelled, let next else { return }
-                coverage = next.activityCoverage
-            }
     }
 }
 
@@ -929,46 +770,9 @@ private struct SettingsPage: View {
             SettingsSection("General") {
                 SettingsToggle(isOn: $settings.launchAtLogin, first: true) { Text("Launch at login") }
                 SettingsToggle(isOn: $settings.notificationsEnabled) { Text("Notify when a limit is nearly used up") }
-                SettingsToggle(isOn: Binding(
-                    get: { !settings.hidePercentage }, set: { settings.hidePercentage = !$0 }))
-                {
-                    Text("Show percentage in menu bar")
-                }
-                SettingsToggle(isOn: Binding(
-                    get: { model.isAuto },
-                    set: { auto in
-                        if auto { settings.pinnedLimit = nil } else if let (id, w) = model.pinned { model.pin(id, w) }
-                    }))
-                {
-                    Text("Show the limit closest to running out")
-                }
             }
-            HStack(spacing: 4) {
-                if let version = model.updater.current {
-                    Text("Tinybar \(version)").textSelection(.enabled)
-                    Text("·")
-                }
-                Button("Report a bug") { NSWorkspace.shared.open(bugReportURL) }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(Color.accentColor)
-            }
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .frame(maxWidth: .infinity)
         }
         .padding(.top, 4)
-    }
-
-    /// The bug report form on GitHub, with the version fields filled in from their ids.
-    private var bugReportURL: URL {
-        let os = ProcessInfo.processInfo.operatingSystemVersion
-        var url = URLComponents(string: "https://github.com/ThiloReintjes/tinybar/issues/new")!
-        url.queryItems = [
-            URLQueryItem(name: "template", value: "bug_report.yml"),
-            URLQueryItem(name: "version", value: model.updater.current),
-            URLQueryItem(name: "macos", value: "\(os.majorVersion).\(os.minorVersion).\(os.patchVersion)"),
-        ]
-        return url.url!
     }
 }
 

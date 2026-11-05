@@ -2,7 +2,7 @@ import Foundation
 @testable import TinybarCore
 import Testing
 
-// Claude Banked Resets, Long-context Prices, Incidents and the release check (0.5.0).
+// Claude Banked Resets and Long-context Prices (0.5.0).
 
 private let gptPrices = Data(#"""
 {"openai": {"models": {
@@ -107,117 +107,4 @@ private func codexLines(context: Int, output: Int) -> String {
     }
     #expect(asked == ["cedar_ember=1", nil])
     #expect(String(decoding: data, as: UTF8.self) == "ok")
-}
-
-// MARK: Incidents
-
-@Test func statuspageCountsOnlyRelevantComponents() throws {
-    let json = Data(#"""
-    {"incidents": [
-      {"id": "a", "name": "Elevated errors for Claude Opus 5.5", "status": "investigating", "impact": "major",
-       "shortlink": "https://stspg.io/x", "updated_at": "2026-10-06T10:00:00Z",
-       "components": [{"name": "Claude Code", "status": "partial_outage"}, {"name": "Claude Cowork", "status": "major_outage"}]},
-      {"id": "b", "name": "Elevated errors on platform.claude.com", "status": "identified", "impact": "major",
-       "components": [{"name": "Claude Console (platform.claude.com)", "status": "major_outage"}]},
-      {"id": "c", "name": "Issue with spend limits", "status": "monitoring", "impact": "minor", "components": []},
-      {"id": "d", "name": "Old", "status": "resolved", "impact": "critical", "components": []}
-    ],
-    "scheduled_maintenances": [
-      {"id": "m", "name": "Database upgrade", "status": "in_progress", "impact": "maintenance",
-       "components": [{"name": "claude.ai", "status": "under_maintenance"}]},
-      {"id": "n", "name": "Later", "status": "scheduled", "components": [{"name": "claude.ai", "status": "operational"}]}
-    ]}
-    """#.utf8)
-    let base = URL(string: "https://status.claude.com")!
-    let found = try StatusFeed.statuspage(json, provider: .claude, base: base, components: ["claude.ai", "Claude API", "Claude Code"])
-    #expect(found.map(\.title) == ["Elevated errors for Claude Opus 5.5", "Issue with spend limits", "Database upgrade"])
-    // Severity from the components that count (Cowork's major outage doesn't).
-    #expect(found[0].severity == .partialOutage)
-    #expect(found[0].components == ["Claude Code"])
-    #expect(found[0].url.absoluteString == "https://stspg.io/x")
-    #expect(found[0].page == "status.claude.com")
-    #expect(found[1].severity == .degraded)
-    #expect(found[2].severity == .maintenance)
-}
-
-@Test func incidentIOCountsOneGroup() throws {
-    let proxy = Data(#"""
-    {"summary": {
-      "affected_components": [
-        {"component_id": "c-cli", "status": "degraded_performance"},
-        {"component_id": "c-web", "status": "full_outage"},
-        {"component_id": "c-img", "status": "full_outage"}
-      ],
-      "structure": {"items": [
-        {"group": {"id": "g1", "name": "Codex", "components": [
-          {"component_id": "c-cli", "name": "CLI"}, {"component_id": "c-web", "name": "Codex Web"}]}},
-        {"group": {"id": "g2", "name": "APIs", "components": [{"component_id": "c-img", "name": "Images"}]}}
-      ]}
-    }}
-    """#.utf8)
-    let affected = try StatusFeed.incidentIOAffected(proxy, group: "Codex")
-    #expect(affected.map(\.name) == ["Codex CLI", "Codex Web"])
-    let summary = Data(#"""
-    {"incidents": [
-      {"id": "i1", "name": "Image generation errors", "status": "investigating", "impact": "major"},
-      {"id": "i2", "name": "Degraded performance in Codex", "status": "identified", "impact": "minor"}
-    ]}
-    """#.utf8)
-    let base = URL(string: "https://status.openai.com")!
-    let found = StatusFeed.incidentIO(affected: affected, summary: summary, provider: .codex, base: base, group: "Codex")
-    #expect(found.count == 1)
-    #expect(found[0].title == "Degraded performance in Codex")
-    #expect(found[0].severity == .majorOutage)
-    #expect(found[0].url.absoluteString == "https://status.openai.com/incidents/i2")
-
-    let quiet = try StatusFeed.incidentIOAffected(Data(#"{"summary": {"affected_components": [], "structure": {"items": []}}}"#.utf8), group: "Codex")
-    #expect(quiet.isEmpty)
-}
-
-// MARK: Releases
-
-@Test func comparesVersionsNumerically() {
-    #expect(ReleaseCheck.isNewer("0.5.0", than: "0.4.0"))
-    #expect(ReleaseCheck.isNewer("0.10.0", than: "0.9.1"))
-    #expect(ReleaseCheck.isNewer("1.0", than: "0.99.9"))
-    #expect(!ReleaseCheck.isNewer("0.4.0", than: "0.4.0"))
-    #expect(!ReleaseCheck.isNewer("0.4", than: "0.4.0"))
-    #expect(!ReleaseCheck.isNewer("0.3.9", than: "0.4.0"))
-}
-
-@Test func updateChecksWaitADayAfterAnAnswer() {
-    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
-    var schedule = UpdateSchedule()
-    #expect(schedule.isDue(now: t0, version: "0.5.0"))
-    schedule.attempt(at: t0, version: "0.5.0")
-    schedule.lastCheck = t0
-    #expect(!schedule.isDue(now: t0 + 23 * 3600, version: "0.5.0"))
-    #expect(schedule.isDue(now: t0 + 24 * 3600, version: "0.5.0"))
-}
-
-@Test func failedUpdateChecksRetryWithinTheHour() {
-    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
-    // Answered a day ago, then the next one failed.
-    var schedule = UpdateSchedule(lastCheck: t0 - 24 * 3600, lastAttempt: t0 - 24 * 3600, version: "0.5.0")
-    schedule.attempt(at: t0, version: "0.5.0")
-    #expect(!schedule.isDue(now: t0 + 59 * 60, version: "0.5.0"))
-    #expect(schedule.isDue(now: t0 + 3600, version: "0.5.0"))
-    // Never answered at all: the same hour, not a day.
-    var fresh = UpdateSchedule()
-    fresh.attempt(at: t0, version: "0.5.0")
-    #expect(fresh.isDue(now: t0 + 3600, version: "0.5.0"))
-}
-
-@Test func aNewVersionChecksRightAway() {
-    let t0 = Date(timeIntervalSince1970: 1_800_000_000)
-    let checked = UpdateSchedule(lastCheck: t0, lastAttempt: t0, version: "0.5.0")
-    #expect(checked.isDue(now: t0 + 60, version: "0.5.1"))
-    // Stores from before the version was kept check once too.
-    #expect(UpdateSchedule(lastCheck: t0).isDue(now: t0 + 60, version: "0.5.0"))
-    // Once the new version has asked, even without an answer, the usual waits apply.
-    var updated = checked
-    updated.attempt(at: t0 + 60, version: "0.5.1")
-    #expect(!updated.isDue(now: t0 + 120, version: "0.5.1"))
-    // That failed, and the old version's answer doesn't hold it off for a day.
-    #expect(updated.isDue(now: t0 + 60 + 3600, version: "0.5.1"))
 }

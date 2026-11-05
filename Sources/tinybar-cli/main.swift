@@ -107,18 +107,6 @@ func backfillLong() async throws {
     print(String(format: "long-context files=%d bytes=%.1fMB in %.1fs", r.filesScanned, Double(r.bytesRead) / 1e6, Date().timeIntervalSince(start)))
 }
 
-func printStatus() async {
-    for id in ProviderID.allCases where StatusFeed.hasFeed(id) {
-        do {
-            let found = try await StatusFeed.fetch(id)
-            print("\(id.displayName): " + (found.isEmpty ? "no incidents" : found.map { "\($0.severity.label): \($0.title) [\($0.components.joined(separator: ", "))] \($0.url)" }.joined(separator: "; ")))
-        } catch {
-            print("\(id.displayName): \(error.localizedDescription)")
-        }
-    }
-    if let r = try? await ReleaseCheck.latest() { print("latest release: \(r.version) \(r.url)") }
-}
-
 switch command {
 case "limits": await printLimits(browser: args.contains("--browser"))
 case "cookies": printCookies()
@@ -128,8 +116,7 @@ case "usage": try await usage()
 case "stats": try await stats()
 case "backfill": try await backfill()
 case "backfill-long": try await backfillLong()
-case "status": await printStatus()
-default: print("usage: tinybar-cli [limits [--browser]|cookies|ingest|usage|stats|backfill|backfill-long|status] [db-path]")
+default: print("usage: tinybar-cli [limits [--browser]|cookies|ingest|usage|stats|backfill|backfill-long] [db-path]")
 }
 
 // `tinybar-cli web`: exercises only the browser-cookie paths.

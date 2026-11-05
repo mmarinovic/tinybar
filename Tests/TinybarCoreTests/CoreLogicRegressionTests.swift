@@ -9,17 +9,6 @@ import Testing
     #expect(table.price(provider: .claude, model: "claude-sonnet-4-") == nil)
 }
 
-@Test func releaseVersionsRespectPrereleasesAndPrefixes() {
-    #expect(ReleaseCheck.isNewer("0.6.0", than: "0.6.0-beta"))
-    #expect(!ReleaseCheck.isNewer("0.6.1-beta", than: "0.6.1"))
-    #expect(ReleaseCheck.isNewer("v1.0.0", than: "0.9.0"))
-    #expect(ReleaseCheck.isNewer("0.6.0-beta.10", than: "0.6.0-beta.2"))
-    #expect(!ReleaseCheck.isNewer("0.6.0+build.2", than: "0.6.0+build.1"))
-    #expect(ReleaseCheck.isNewer("0.6.0-beta", than: "0.5.9"))
-    #expect(ReleaseCheck.isNewer("0.6.0-beta", than: "0.6.0-alpha"))
-    #expect(!ReleaseCheck.isNewer("", than: "0.6.0"))
-}
-
 @Test func summariesExcludeFutureDaysAcrossDST() {
     var calendar = Calendar(identifier: .gregorian)
     calendar.timeZone = TimeZone(identifier: "America/Los_Angeles")!
@@ -89,22 +78,8 @@ import Testing
     #expect(price.cost(TokenCounts(), long: [200_000: excessive]) == 0)
 }
 
-@Test func malformedFeedsDoNotClearCachedData() throws {
+@Test func malformedPriceFeedsDoNotClearCachedData() throws {
     #expect(throws: (any Error).self) { try PriceTable.parse(Data("{}".utf8), fetchedAt: nil) }
-    let base = URL(string: "https://status.example.com")!
-    #expect(throws: (any Error).self) {
-        try StatusFeed.statuspage(Data("{}".utf8), provider: .claude, base: base, components: nil)
-    }
-    #expect(throws: (any Error).self) {
-        try StatusFeed.incidentIOAffected(Data(#"{"summary":{}}"#.utf8), group: "Codex")
-    }
-    #expect(try StatusFeed.statuspage(Data(#"{"incidents":[]}"#.utf8), provider: .claude, base: base, components: nil).isEmpty)
-    for components in ["[null]", "[{}]", "null", "{}"] {
-        let malformed = Data("{\"incidents\":[{\"name\":\"Outage\",\"status\":\"investigating\",\"impact\":\"critical\",\"components\":\(components)}]}".utf8)
-        #expect(throws: (any Error).self) {
-            try StatusFeed.statuspage(malformed, provider: .claude, base: base, components: nil)
-        }
-    }
 }
 
 @Test func missingResetBeforeExpiryKeepsAlertCycle() throws {

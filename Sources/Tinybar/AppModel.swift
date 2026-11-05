@@ -23,13 +23,8 @@ final class AppModel {
     private(set) var usage: [UsageRange: UsageSummary] = [:]
     /// One Provider each, for its detail view.
     private(set) var providerUsage: [ProviderID: [UsageRange: UsageSummary]] = [:]
-    /// What each subscription with token history gets you, for the Stats window's Plans page.
-    private(set) var plans: [PlanRow] = []
     private var usageRows: [DailyUsage] = []
     private var prices = PriceTable.empty
-    /// Open Incidents from each subscription's status page.
-    private(set) var incidents: [ProviderID: [Incident]] = [:]
-    private var lastStatusCheck: Date?
     private(set) var importProgress: Double?
     private(set) var lastUpdated: Date?
     var isRefreshing: Bool { isFetching || usageTask != nil }
@@ -37,7 +32,6 @@ final class AppModel {
     private var usageTask: Task<Void, Never>?
 
     let settings: Settings
-    let updater = Updater()
     private let sources: [ProviderID: any UsageProvider]
     private let store: UsageStore?
     private let pricing = PricingService()
@@ -181,12 +175,6 @@ final class AppModel {
             }
         }
         guard !isAsleep, !isLocked else { return nil }
-        await refreshIncidents(throttle: throttle)
-        guard !isAsleep, !isLocked else { return nil }
-        if let release = await updater.checkIfDue(), settings.notificationsEnabled {
-            notifier.send(update: release)
-        }
-        guard !isAsleep, !isLocked else { return nil }
         if usageTask == nil {
             usageTask = Task {
                 await refreshUsage()
@@ -195,35 +183,6 @@ final class AppModel {
             }
         }
         return usageTask
-    }
-
-    /// Reads the status pages of the enabled subscriptions that have one. A page that can't be
-    /// read keeps its last answer.
-    private func refreshIncidents(throttle: TimeInterval) async {
-        let now = Date()
-        if let last = lastStatusCheck, last > now || (throttle > 0 && now.timeIntervalSince(last) < throttle) { return }
-        lastStatusCheck = now
-        let ids = enabledProviders.filter(StatusFeed.hasFeed)
-        await withTaskGroup(of: (ProviderID, [Incident]?).self) { group in
-            for id in ids {
-                group.addTask { (id, try? await StatusFeed.fetch(id)) }
-            }
-            for await (id, found) in group {
-                if let found { incidents[id] = found }
-            }
-        }
-        for id in incidents.keys where !ids.contains(id) { incidents[id] = nil }
-    }
-
-    /// Snapshots only: shows an Incident without a real one.
-    func showForSnapshot(_ incident: Incident) {
-        incidents[incident.provider] = [incident]
-        lastStatusCheck = .distantFuture
-    }
-
-    /// The worst Incident that disrupts a subscription (maintenance doesn't), for the menu bar.
-    var disruption: Incident? {
-        enabledProviders.compactMap { incidents[$0]?.first }.filter { $0.severity >= .degraded }.max { $0.severity < $1.severity }
     }
 
     private func apply(_ outcome: Result<ProviderSnapshot, ProviderError>, to id: ProviderID) {
@@ -299,31 +258,6 @@ final class AppModel {
         guard !isAsleep, !isLocked else { return }
         usageRows = (try? await store.daily(since: DayKey.daysAgo(UsageRange.month.days - 1))) ?? []
         rebuildUsage()
-        await refreshPlanValues(store)
-    }
-
-    /// Notes each fresh weekly reading, then works out what the plans buy (SPEC §14).
-    private func refreshPlanValues(_ store: UsageStore) async {
-        var readings: [ProviderID: [LimitReading]] = [:]
-        for id in enabledProviders where id == .claude || id == .codex {
-            guard let state = providers[id], let snapshot = state.snapshot else { continue }
-            if !state.isStale { try? await store.recordLimitReadings(snapshot) }
-            readings[id] = (try? await store.limitReadings(provider: id)) ?? []
-        }
-        // Kept windows go back further than the rows held for Usage.
-        let month = DayKey.daysAgo(UsageRange.month.days - 1)
-        let oldest = readings.values.joined().map(\.start).min().map { DayKey.string(for: $0) }
-        let since = min(oldest ?? month, month)
-        let rows = since < month ? (try? await store.daily(since: since)) ?? usageRows : usageRows
-        let hours = (try? await store.hourlyTokens(since: since)) ?? []
-        plans = readings.keys.sorted().compactMap { id in
-            guard let snapshot = providers[id]?.snapshot else { return nil }
-            let value = PlanValue.build(
-                provider: id, plan: snapshot.plan, readings: readings[id] ?? [],
-                usage: rows.filter { $0.provider == id }, hours: hours.filter { $0.provider == id },
-                prices: prices)
-            return value.map { PlanRow(id: id, plan: snapshot.plan, value: $0) }
-        }
     }
 
     /// Recomputes summaries from the in-memory 30-day rows (a few thousand at most), so opening
@@ -369,58 +303,6 @@ final class AppModel {
         } catch {
             return nil
         }
-    }
-
-    // MARK: Pinned Limit
-
-    /// The window shown in the menu bar: the one the user pinned, else Auto (SPEC §6).
-    var pinned: (ProviderID, LimitWindow)? {
-        explicitPin ?? autoPinned
-    }
-
-    /// The user's pick, while its window still exists.
-    private var explicitPin: (ProviderID, LimitWindow)? {
-        guard let key = settings.pinnedLimit else { return nil }
-        let parts = key.split(separator: "/", maxSplits: 1).map(String.init)
-        guard parts.count == 2, let id = ProviderID(rawValue: parts[0]),
-              let window = providers[id]?.snapshot?.windows.first(where: { $0.id == parts[1] })
-        else { return nil }
-        return (id, window)
-    }
-
-    /// Whether the menu bar follows Auto rather than a pinned window.
-    var isAuto: Bool { explicitPin == nil }
-
-    /// Auto: of every subscription's account-wide windows, the one that runs out first before its
-    /// Reset; if none does, the one with the least left. Stale subscriptions only count when
-    /// nothing else is known.
-    private var autoPinned: (ProviderID, LimitWindow)? {
-        func candidates(stale: Bool) -> [(ProviderID, LimitWindow, Date?)] {
-            enabledProviders.flatMap { id -> [(ProviderID, LimitWindow, Date?)] in
-                guard let state = providers[id], state.isStale == stale, let snapshot = state.snapshot else { return [] }
-                return snapshot.windows.filter { !$0.isModelSpecific }.map { w in
-                    let runOut = stale ? nil : w.runOutTime(asOf: snapshot.fetchedAt).flatMap { w.runsOutBeforeReset($0) ? $0 : nil }
-                    return (id, w, runOut)
-                }
-            }
-        }
-        let fresh = candidates(stale: false)
-        let all = fresh.isEmpty ? candidates(stale: true) : fresh
-        if let first = all.filter({ $0.2 != nil }).min(by: { $0.2! < $1.2! }) { return (first.0, first.1) }
-        return all.min {
-            ($0.1.remainingPercent, $0.1.resetsAt ?? .distantFuture) < ($1.1.remainingPercent, $1.1.resetsAt ?? .distantFuture)
-        }.map { ($0.0, $0.1) }
-    }
-
-    /// Pins a window; clicking the pinned window again goes back to Auto.
-    func pin(_ provider: ProviderID, _ window: LimitWindow) {
-        let key = "\(provider.rawValue)/\(window.id)"
-        settings.pinnedLimit = settings.pinnedLimit == key && !isAuto ? nil : key
-    }
-
-    func isPinned(_ provider: ProviderID, _ window: LimitWindow) -> Bool {
-        guard let p = pinned else { return false }
-        return p.0 == provider && p.1.id == window.id
     }
 
     // MARK: Settings changes

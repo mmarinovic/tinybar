@@ -7,7 +7,7 @@ enum AppMenu {
         let menu = NSMenu()
         let appItem = NSMenuItem()
         let appMenu = NSMenu(title: "Tinybar")
-        appMenu.addItem(withTitle: "Quit Tinybar", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         appItem.submenu = appMenu
         menu.addItem(appItem)
 
