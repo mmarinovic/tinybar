@@ -25,7 +25,7 @@ final class StatsWindowController: NSObject, NSWindowDelegate {
         window.styleMask = [.titled, .closable, .miniaturizable, .fullSizeContentView]
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
-        window.title = "Tinybar Stats"
+        window.title = "Stats"
         window.isMovableByWindowBackground = true
         window.isReleasedWhenClosed = false
         window.delegate = self
@@ -55,7 +55,7 @@ final class StatsWindowController: NSObject, NSWindowDelegate {
 
 /// The Stats window's cards: the overview, and a closer look at one kind of activity each.
 enum StatsPage: String, CaseIterable, Identifiable {
-    case overview, commands, models, languages, plans
+    case overview, commands, models, languages
 
     var id: String { rawValue }
 
@@ -65,7 +65,6 @@ enum StatsPage: String, CaseIterable, Identifiable {
         case .commands: "Commands"
         case .models: "Models"
         case .languages: "Languages"
-        case .plans: "Plans"
         }
     }
 }
@@ -107,14 +106,11 @@ struct StatsView: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
                 .frame(width: 210)
-                // Plans are about the current week, whatever the range.
-                .opacity(page == .plans ? 0 : 1)
-                .disabled(page == .plans)
                 Button(action: copy) {
                     Label(copied ? "Copied" : "Copy image", systemImage: copied ? "checkmark" : "doc.on.doc")
                         .frame(minWidth: 96)
                 }
-                .disabled(summary.map { $0.isEmpty && page != .plans } ?? true)
+                .disabled(summary.map(\.isEmpty) ?? true)
                 .keyboardShortcut("c")
                 .help("Copy this card as an image, ready to paste")
             }
@@ -123,7 +119,7 @@ struct StatsView: View {
             .padding(.trailing, 20)
             .frame(height: 52)
 
-            StatsCard(summary: summary, importing: model.importProgress, palette: palette, page: page, plans: model.plans,
+            StatsCard(summary: summary, importing: model.importProgress, palette: palette, page: page,
                       forward: forward, loadFailed: loadFailed, summaryRevision: summaryRevision) { name in
                 picked = picked == name ? nil : name
             }
@@ -163,7 +159,7 @@ struct StatsView: View {
     }
 
     private func copy() {
-        guard let summary, let image = StatsCard.image(summary, page: page, plans: model.plans, scheme: scheme) else { return }
+        guard let summary, let image = StatsCard.image(summary, page: page, scheme: scheme) else { return }
         NSPasteboard.general.clearContents()
         NSPasteboard.general.writeObjects([image])
         copied = true
@@ -177,7 +173,7 @@ struct StatsView: View {
 // MARK: Palette
 
 /// The card's colours, fixed per appearance rather than read from AppKit, so the copied image looks
-/// the same as the window. Claude is its logo's orange; Codex is ink, like OpenAI's mark.
+/// the same as the window. Black and white only: Codex is ink, Claude a mid grey.
 struct StatsPalette {
     let canvas: Color
     /// Hover details float on this, a step above the canvas.
@@ -190,15 +186,15 @@ struct StatsPalette {
 
     init(_ scheme: ColorScheme) {
         if scheme == .dark {
-            canvas = Color(red: 0.11, green: 0.11, blue: 0.12)
-            raised = Color(red: 0.17, green: 0.17, blue: 0.18)
-            ink = Color(white: 0.96)
-            claude = Color(red: 0.91, green: 0.53, blue: 0.40)
+            canvas = .black
+            raised = Color(white: 0.12)
+            ink = .white
+            claude = Color(white: 0.55)
         } else {
             canvas = .white
             raised = .white
-            ink = Color(white: 0.07)
-            claude = Color(red: 0.85, green: 0.45, blue: 0.31)
+            ink = .black
+            claude = Color(white: 0.6)
         }
         ink2 = ink.opacity(0.62)
         ink3 = ink.opacity(0.4)
@@ -220,7 +216,6 @@ struct StatsCard: View {
     let importing: Double?
     let palette: StatsPalette
     var page: StatsPage = .overview
-    var plans: [PlanRow] = []
     /// The page came after the previous one: it enters from the right.
     var forward = true
     var loadFailed = false
@@ -234,12 +229,11 @@ struct StatsCard: View {
     nonisolated static let space = "statsCard"
     /// Developer snapshots: a point in the card treated as pointed at (`--snapshot --hover x,y`).
     nonisolated(unsafe) static var snapshotHover: CGPoint?
-    static let snapshotHoverNotification = Notification.Name("TinybarStatsSnapshotHover")
+    static let snapshotHoverNotification = Notification.Name("StatsSnapshotHover")
 
     var body: some View {
         ZStack {
-            // Plans don't depend on the range, which an empty summary would strand you in.
-            if let summary, !summary.isEmpty || page == .plans {
+            if let summary, !summary.isEmpty {
                 content(summary)
             } else if let importing {
                 VStack(spacing: 10) {
@@ -305,7 +299,6 @@ struct StatsCard: View {
                     case .commands: CommandsPage(summary: s, palette: palette).padding(.top, 18)
                     case .models: ModelsPage(summary: s, palette: palette).padding(.top, 22)
                     case .languages: LanguagesPage(summary: s, palette: palette).padding(.top, 18)
-                    case .plans: PlansPage(plans: plans, palette: palette).padding(.top, 18)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -356,8 +349,8 @@ struct StatsCard: View {
 
     /// The card as an image at twice its size, for the clipboard.
     @MainActor
-    static func image(_ summary: StatsSummary, page: StatsPage = .overview, plans: [PlanRow] = [], scheme: ColorScheme) -> NSImage? {
-        let renderer = ImageRenderer(content: StatsCard(summary: summary, importing: nil, palette: StatsPalette(scheme), page: page, plans: plans)
+    static func image(_ summary: StatsSummary, page: StatsPage = .overview, scheme: ColorScheme) -> NSImage? {
+        let renderer = ImageRenderer(content: StatsCard(summary: summary, importing: nil, palette: StatsPalette(scheme), page: page)
             .environment(\.colorScheme, scheme))
         renderer.scale = 2
         return renderer.nsImage
@@ -536,47 +529,14 @@ private struct Header: View {
     let palette: StatsPalette
 
     var body: some View {
-        HStack(alignment: .center, spacing: 8) {
-            Mark(palette: palette).frame(width: 22, height: 22)
-            Text("Tinybar").font(.system(size: 17, weight: .semibold)).foregroundStyle(palette.ink)
-            // The copied image says which card it is; the overview is just Tinybar.
-            if page != .overview {
-                Text(page.title).font(.system(size: 17, weight: .regular)).foregroundStyle(palette.ink3)
-                    .transition(.opacity)
-            }
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(page.title).font(.system(size: 17, weight: .semibold)).foregroundStyle(palette.ink)
+                .contentTransition(.opacity)
             Spacer()
-            Text(page == .plans ? "Benchmark from \(ModelBenchmark.asOf)" : StatsText.span(summary))
+            Text(StatsText.span(summary))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(palette.ink2)
         }
-    }
-}
-
-/// The app icon's two rings, drawn in vector: the same in the window and in a copied image. Strokes
-/// scale with the frame.
-private struct Mark: View {
-    let palette: StatsPalette
-
-    var body: some View {
-        GeometryReader { g in
-            let side = min(g.size.width, g.size.height)
-            let line = side * 0.16
-            ZStack {
-                ring(0.74, Color(red: 0.91, green: 0.45, blue: 0.27), line: line, inset: 0)
-                ring(0.42, Color(red: 0.25, green: 0.53, blue: 0.94), line: line, inset: side * 0.27)
-            }
-            .frame(width: side, height: side)
-        }
-    }
-
-    private func ring(_ fraction: Double, _ color: Color, line: CGFloat, inset: CGFloat) -> some View {
-        ZStack {
-            Circle().stroke(palette.faint, lineWidth: line)
-            Circle().trim(from: 0, to: fraction)
-                .stroke(color, style: StrokeStyle(lineWidth: line, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-        }
-        .padding(inset + line / 2)
     }
 }
 

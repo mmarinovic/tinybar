@@ -42,8 +42,8 @@ swift run tinybar-cli ingest [db]          # ingest Claude + Codex logs
 swift run tinybar-cli usage [db]           # print usage summaries
 swift run tinybar-cli stats [db]           # raw Activity counters, to check against the logs
 swift Scripts/make-icon.swift              # redraw Resources/AppIcon.icns and docs/icon.png
-.build/debug/Tinybar --snapshot out.png [--page <provider>|settings] [--backdrop] [--redact-projects]
-.build/debug/Tinybar --snapshot out.png --stats [--page commands|models|languages|plans] [--range week|month|all] [--model <id>] [--hover x,y]   # a Stats card
+.build/debug/Tinybar --snapshot out.png [--page <provider>|settings] [--backdrop] [--redact-projects] [--menubar]
+.build/debug/Tinybar --snapshot out.png --stats [--page commands|models|languages] [--range week|month|all] [--model <id>] [--hover x,y]   # a Stats card
 ```
 
 `--snapshot` renders the popover to PNG in light and dark. `--backdrop` puts a worst-case window
@@ -82,7 +82,7 @@ Open an issue first and say which plan you're on. For the PR:
 - Take the data from where the provider's own CLI or app already keeps it, and call the endpoints
   that client itself calls. Show the request headers and response shape in the PR.
 - Implement `UsageProvider` in `Sources/TinybarCore/<Provider>/`, mapping to `LimitWindow`s with
-  `id`s that stay stable across fetches (pinning and alerts depend on them).
+  `id`s that stay stable across fetches (alerts depend on them).
 - Map every error to `ProviderError`, so an expired login shows as stale with a hint.
 - Test the mapping with a response fixture. Never commit real tokens, emails or account IDs.
 

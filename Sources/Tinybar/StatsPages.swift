@@ -539,31 +539,20 @@ struct LanguagesPage: View {
     }
 }
 
-/// Fixed colours for common languages, so a language keeps its colour whatever the range or model.
-/// Close to the colours code hosts use for them, nudged apart where two would look alike.
+/// Fixed shades of ink for common languages, so a language keeps its shade whatever the range or
+/// model. Neighbours in the list take shades far apart.
 enum LanguageColor {
+    private static let known = [
+        "Swift", "TypeScript", "JavaScript", "Python", "Markdown", "JSON", "HTML", "CSS",
+        "Shell", "YAML", "Rust", "Go", "SQL", "Ruby", "Kotlin", "TOML",
+    ]
+    private static let shades: [Double] = [0.88, 0.5, 0.7, 0.36, 0.8, 0.6]
+
+    static func isKnown(_ name: String) -> Bool { known.contains(name) }
+
     static func color(_ name: String, _ palette: StatsPalette) -> Color {
-        let hex: UInt32? = switch name {
-        case "Swift": 0xF05138
-        case "TypeScript": 0x3178C6
-        case "JavaScript": 0xE2B714
-        case "Python": 0x3BA55C
-        case "Markdown": 0x7C5CD6
-        case "JSON": 0x14A3A0
-        case "HTML": 0xE8608F
-        case "CSS": 0xC026D3
-        case "Shell": 0x8BC34A
-        case "YAML": 0xD9363E
-        case "Rust": 0xB45F2B
-        case "Go": 0x2EB4E0
-        case "SQL": 0xE38C00
-        case "Ruby": 0x9F1239
-        case "Kotlin": 0x8B6CF6
-        case "TOML": 0x9C6B4E
-        default: nil
-        }
-        guard let hex else { return palette.ink.opacity(0.32) }
-        return Color(red: Double(hex >> 16 & 0xFF) / 255, green: Double(hex >> 8 & 0xFF) / 255, blue: Double(hex & 0xFF) / 255)
+        guard let i = known.firstIndex(of: name) else { return palette.ink.opacity(0.22) }
+        return palette.ink.opacity(shades[i % shades.count])
     }
 }
 
@@ -634,7 +623,7 @@ private struct LanguageMix: View {
             let total = parts.values.reduce(0, +)
             if total >= Self.minimumLines { mixes.append((m, parts, total)) }
         }
-        let keyLanguages = totals.filter { LanguageColor.color($0.key, palette) != palette.ink.opacity(0.32) }
+        let keyLanguages = totals.filter { LanguageColor.isKnown($0.key) }
             .sorted { $0.value > $1.value }.prefix(Self.coloured).map(\.key)
         mixes.sort { $0.total > $1.total }
         let missing = summary.pickedModel.flatMap { m in mixes.contains { $0.model.name == m.name } ? nil : m }
@@ -649,7 +638,7 @@ private struct LanguageMix: View {
             SectionTitle(text: "What each model writes", palette: palette)
                 .statsTip(StatsTip(
                     id: "mix", title: "What each model writes",
-                    note: "Each model's lines added, split by language. The six most written languages have their colour; the rest are grey. Shown from 50 lines."))
+                    note: "Each model's lines added, split by language. The six most written languages have their own shade; the rest are light grey. Shown from 50 lines."))
                 .padding(.bottom, 2)
             ForEach(shown, id: \.model.id) { entry in
                 row(entry.model, entry.parts, entry.total, keyLanguages, dimmed: pickedHere && entry.model.name != summary.model)
@@ -671,7 +660,7 @@ private struct LanguageMix: View {
     @ViewBuilder
     private func row(_ m: StatsSummary.Model, _ parts: [String: Int64], _ total: Int64, _ keys: [String], dimmed: Bool) -> some View {
         let rest = total - keys.reduce(0) { $0 + (parts[$1] ?? 0) }
-        let segments = keys.map { (LanguageColor.color($0, palette), parts[$0] ?? 0) } + [(palette.ink.opacity(0.16), rest)]
+        let segments = keys.map { (LanguageColor.color($0, palette), parts[$0] ?? 0) } + [(palette.ink.opacity(0.12), rest)]
         let isPicked = summary.model == m.name
         let id = "mix:\(m.name)"
         let label = HStack(spacing: 6) {

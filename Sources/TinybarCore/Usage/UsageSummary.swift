@@ -158,4 +158,14 @@ public enum Format {
         if h > 0 { return "\(h)h \(m)m" }
         return "\(max(m, 1))m"
     }
+
+    /// A share of a Limit Window as a whole percentage. Only an untouched window reads 100% and
+    /// only a used-up one 0%, so a sliver either way still shows.
+    public static func percent(_ value: Double) -> String {
+        let clamped = min(max(value, 0), 100)
+        var n = Int(clamped.rounded())
+        if clamped < 100 { n = min(n, 99) }
+        if clamped > 0 { n = max(n, 1) }
+        return "\(n)%"
+    }
 }

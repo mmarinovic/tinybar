@@ -23,13 +23,6 @@ closed, and has no dependencies, no WebViews and no telemetry. It reads the logi
 already have and never changes anything on your account. It's a from-scratch alternative to
 [CodexBar](https://github.com/steipete/CodexBar).
 
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshot-dark.png">
-    <img src="docs/screenshot.png" alt="Tinybar overview with Claude, Codex and Gemini limits and today's usage" width="340">
-  </picture>
-</p>
-
 ## Install
 
 ```sh
@@ -40,8 +33,7 @@ Or download the zip from [Releases](https://github.com/ThiloReintjes/tinybar/rel
 signed with Developer ID and notarized by Apple.
 
 Tinybar starts at login and turns on every provider whose CLI you're signed in to, so there is
-nothing to set up. When a new version is out, the popover shows **Update to x.y.z**, and one click
-updates it through Homebrew. To uninstall, run `brew uninstall --cask thiloreintjes/tinybar/tinybar`
+nothing to set up. It doesn't update itself: build it again from source to update. To uninstall, run `brew uninstall --cask thiloreintjes/tinybar/tinybar`
 and add `--zap` to also delete your history and settings.
 
 ## What it shows
@@ -49,19 +41,18 @@ and add `--zap` to also delete your history and settings.
 - **Every limit.** The 5-hour and weekly windows for Claude, Codex and Gemini, and Cursor's billing
   cycle, with reset countdowns. Model-specific limits, Claude extra usage, Cursor on-demand spend,
   Codex credits and banked resets are included.
-- **When you'll run out.** At your pace so far, the time each window hits 0%. It turns orange if
+- **Every Claude login.** One row per `~/.claude*` config dir, the one with the most weekly limit
+  left first.
+- **When you'll run out.** At your pace so far, the time each window hits 0%. It turns bold if
   that comes before the reset.
-- **One ring in the menu bar** for the limit closest to running out, or the one you pin.
-- **Outages.** When Claude Code, Codex or Cursor report trouble on their status page, the ring gets
-  an orange or red light, and the subscription's page links to the incident.
+- **A plain icon in the menu bar.** Black and white, no numbers; click it to see everything.
 - **Token history and cost.** Today, 7 days and 30 days from your Claude Code and Codex logs, by
   model and project, priced at [models.dev](https://models.dev) API rates. Tinybar keeps daily totals
   in a local database, so they survive Claude Code deleting transcripts after 30 days. Gemini and
   Cursor show limits only.
 - **Stats.** A separate window with every token you used, agent hours, tool calls, lines added, the
-  commands your agents run and the languages they write. **Plans** compares what each subscription
-  gets you at API prices, measured from your limits and logs, and how its models score on
-  [Artificial Analysis](https://artificialanalysis.ai). **Copy image** puts a card on your clipboard.
+  commands your agents run and the languages they write. **Copy image** puts a card on your
+  clipboard.
 - **Alerts.** A notification at 90% and 95% of a window, and when a nearly used-up window resets.
 
 <p align="center">
@@ -85,8 +76,7 @@ expires, the card turns stale until you run `claude`, `codex` or `agy` once, or 
 | Gemini | none | `agy -p /usage`, Antigravity CLI's own report | none |
 | Cursor | Cursor.app's `state.vscdb`, else your browser's `cursor.com` cookie | `cursor.com/api/usage-summary` | none |
 
-The only other requests carry no login. Prices come from `models.dev` and the latest release from
-GitHub, once a day each. The Claude, OpenAI and Cursor status pages are checked with every poll.
+The only other request carries no login: prices come from `models.dev`, once a day.
 
 Notifications are requested once, for alerts. Tinybar reads Claude's Keychain item through
 `/usr/bin/security`, the tool Claude Code itself uses, so there is no prompt. If a CLI login is

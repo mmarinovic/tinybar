@@ -7,4 +7,4 @@ command -v brew > /dev/null || { echo "Homebrew is required: https://brew.sh"; e
 
 brew install --cask thiloreintjes/tinybar/tinybar
 open -a Tinybar
-printf '\n\e[1;32mTinybar is running.\e[0m Look for the ring in your menu bar.\n'
+printf '\n\e[1;32mTinybar is running.\e[0m Look for the two rings in your menu bar.\n'

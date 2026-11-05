@@ -177,10 +177,6 @@ public struct StatsSummary: Sendable {
     public var longestStreak: Int
     public var busiestDay: (day: String, tokens: Int64)?
 
-    /// For Providers whose activity was counted from only part of their tokens' logs (the rest
-    /// were deleted or compressed before Tinybar counted activity): the share that was read.
-    public var activityCoverage: [ProviderID: Double]
-
     public var isEmpty: Bool { tokens == 0 && responses == 0 }
 
     /// Speed needs this many samples before it is shown.
@@ -262,14 +258,12 @@ public struct StatsSummary: Sendable {
         var toolNames: [ToolCategory: [String: Int64]] = [:]
         var peak: Int64 = 0
         var heat = Array(repeating: Array(repeating: Hour(), count: 24), count: 7)
-        var counted: [ProviderID: Int64] = [:]
         for s in stats {
             let bar = barIndex[s.day]
             if s.key.hasPrefix(StatKey.hourTokensPrefix) {
                 if let h = Int(s.key.dropFirst(StatKey.hourTokensPrefix.count)), (0..<24).contains(h) {
                     heat[weekday(s.day, calendar)][h].tokens += s.value
                 }
-                counted[s.provider, default: 0] += s.value
             } else if s.key.hasPrefix(StatKey.hourPrefix) {
                 if let h = Int(s.key.dropFirst(StatKey.hourPrefix.count)), (0..<24).contains(h) {
                     heat[weekday(s.day, calendar)][h].responses += s.value
@@ -341,14 +335,6 @@ public struct StatsSummary: Sendable {
         let (current, longest) = streaks(Set((streakDays ?? allDays).filter { $0 <= today }), today: today, calendar: calendar)
         let busiest = dayTotals.max { $0.value < $1.value }
 
-        // Token totals outlive the logs; activity is counted from the logs on disk. Where they
-        // differ, say how much was read rather than imply the agents were idle.
-        var coverage: [ProviderID: Double] = [:]
-        for (provider, t) in byProvider where t > 0 {
-            let share = Double(counted[provider] ?? 0) / Double(t)
-            if share < 0.97 { coverage[provider] = share }
-        }
-
         return StatsSummary(
             range: range, model: model, firstDay: first, lastDay: today,
             tokens: tokens, allTokens: allUsage.reduce(0) { $0 + $1.tokens.total }, tokenCounts: counts, tokensByProvider: byProvider, cost: priced ? cost : nil, hasUnpriced: unpriced, bucket: bucket, bars: bars,
@@ -367,8 +353,7 @@ public struct StatsSummary: Sendable {
             projects: projects.count,
             topProjects: projects.map { Count(name: ProjectResolver.displayName($0.key), value: $0.value) }.sorted { $0.value > $1.value },
             heat: heat, weekdays: weekdays, activeDays: dayTotals.count, currentStreak: current, longestStreak: longest,
-            busiestDay: busiest.map { (day: $0.key, tokens: $0.value) },
-            activityCoverage: coverage)
+            busiestDay: busiest.map { (day: $0.key, tokens: $0.value) })
     }
 
     private static func models(_ usage: [DailyUsage], _ stats: [DailyStat], _ prices: PriceTable) -> [Model] {

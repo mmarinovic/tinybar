@@ -30,48 +30,40 @@ enum Motion {
 // MARK: Rings
 
 /// Concentric rings, one per Limit Window, longest outside. Each ring is full when the window is
-/// untouched and empties as it is used, like the ring in the menu bar.
+/// untouched and empties as it is used. Ink on a faint track, the same for every subscription.
 struct LimitRings: View {
     let windows: [LimitWindow]
-    /// nil draws neutral grey rings (empty state).
-    let provider: ProviderID?
     var lineWidth: CGFloat = 4.5
     var gap: CGFloat = 2
     var dimmed = false
 
     var body: some View {
-        let track = (provider?.color ?? .secondary).opacity(0.16)
         ZStack {
             if windows.isEmpty {
-                Circle().stroke(track, lineWidth: lineWidth).padding(lineWidth / 2)
+                Circle().stroke(.primary.opacity(0.1), lineWidth: lineWidth).padding(lineWidth / 2)
             }
             ForEach(Array(windows.enumerated()), id: \.element.id) { i, window in
-                Ring(fraction: window.remainingPercent / 100, provider: provider, track: track, lineWidth: lineWidth)
+                Ring(fraction: window.remainingPercent / 100, lineWidth: lineWidth)
                     .padding(CGFloat(i) * (lineWidth + gap) + lineWidth / 2)
             }
         }
         .aspectRatio(1, contentMode: .fit)
-        .saturation(dimmed ? 0 : 1)
-        .opacity(dimmed ? 0.55 : 1)
+        .opacity(dimmed ? 0.4 : 1)
         .accessibilityElement()
-        .accessibilityLabel(windows.map { "\($0.title) \(Int($0.remainingPercent.rounded()))% left" }.joined(separator: ", "))
+        .accessibilityLabel(windows.map { "\($0.title) \(Format.percent($0.remainingPercent)) left" }.joined(separator: ", "))
     }
 
     private struct Ring: View {
         let fraction: Double
-        let provider: ProviderID?
-        let track: Color
         let lineWidth: CGFloat
 
         var body: some View {
             let f = min(max(fraction, 0), 1)
             ZStack {
-                Circle().stroke(track, lineWidth: lineWidth)
+                Circle().stroke(.primary.opacity(0.1), lineWidth: lineWidth)
                 Circle()
                     .trim(from: 0, to: f)
-                    .stroke(
-                        provider?.ringFill(fraction: f) ?? AnyShapeStyle(Color.secondary),
-                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .stroke(.primary, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
                     .rotationEffect(.degrees(-90))
             }
             .animation(.smooth(duration: 0.5), value: f)
@@ -133,54 +125,47 @@ extension ProviderSnapshot {
 
 // MARK: Numbers
 
-/// A percentage set the way the rings are read: rounded numerals, a smaller percent sign.
+/// What is left of a Limit Window: the whole number with its percent sign at the same weight and
+/// size, digits monospaced so a column of them lines up on the right.
 struct PercentText: View {
     let percent: Double
-    var size: CGFloat = 22
+    var size: CGFloat = 15
+    /// Says "left" after the number, in the secondary colour.
+    var suffix = false
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 1) {
-            Text("\(Int(percent.rounded()))")
-                .font(.system(size: size, weight: .semibold, design: .rounded))
-                .tracking(size > 18 ? -0.4 : 0)
-            Text("%")
-                .font(.system(size: size * 0.55, weight: .semibold, design: .rounded))
-                .foregroundStyle(.secondary)
+        HStack(alignment: .firstTextBaseline, spacing: 3) {
+            Text(Format.percent(percent))
+                .font(.system(size: size, weight: percent < 20 ? .bold : .semibold).monospacedDigit())
+            if suffix {
+                Text("left")
+                    .font(.system(size: size * 0.72))
+                    .foregroundStyle(.secondary)
+            }
         }
-        .monospacedDigit()
-        .foregroundStyle(Self.color(percent))
+        .foregroundStyle(.primary)
+        .lineLimit(1)
+        .fixedSize()
         .accessibilityElement()
-        .accessibilityLabel("\(Int(percent.rounded()))% left")
-    }
-
-    /// Only a limit that is nearly gone gets a colour; everything else stays neutral.
-    static func color(_ percent: Double) -> Color {
-        switch percent {
-        case ..<5: .red
-        case ..<20: .orange
-        default: .primary
-        }
+        .accessibilityLabel("\(Format.percent(percent)) left")
     }
 }
 
 /// Fills with what is left: full at the start of a window, empty when the limit is reached.
 struct RemainingBar: View {
     let fraction: Double
-    let provider: ProviderID
 
     var body: some View {
         GeometryReader { geo in
             let f = min(max(fraction, 0), 1)
             ZStack(alignment: .leading) {
-                Capsule().fill(provider.color.opacity(0.14))
+                Capsule().fill(.primary.opacity(0.1))
                 Capsule()
-                    .fill(provider.barFill)
-                    .mask(alignment: .leading) {
-                        Capsule().frame(width: f > 0 ? max(6, geo.size.width * f) : 0)
-                    }
+                    .fill(.primary)
+                    .frame(width: f > 0 ? max(4, geo.size.width * f) : 0)
             }
         }
-        .frame(height: 6)
+        .frame(height: 4)
         .animation(.smooth(duration: 0.5), value: fraction)
     }
 }
@@ -204,7 +189,7 @@ enum ResetText {
 
 // MARK: Charts
 
-/// Daily tokens, stacked by Provider in the same colours as the rings.
+/// Daily tokens, stacked by Provider in shades of grey.
 struct UsageBars: View {
     let days: [UsageSummary.DayBar]
     let range: UsageRange
@@ -246,7 +231,7 @@ struct UsageBars: View {
 }
 
 /// Top models or projects. Each row is backed by a faint bar showing its share of all tokens,
-/// split by subscription in their colours.
+/// split by subscription in their shades.
 struct Breakdown: View {
     let title: String
     let lines: [UsageSummary.Line]
@@ -284,7 +269,7 @@ struct Breakdown: View {
                 HStack(spacing: 0) {
                     ForEach(line.byProvider.keys.sorted(), id: \.self) { id in
                         Rectangle()
-                            .fill(id.color.opacity(0.16))
+                            .fill(id.color.opacity(0.14))
                             .frame(width: geo.size.width * share(line.byProvider[id] ?? 0))
                     }
                 }
@@ -300,16 +285,14 @@ struct Breakdown: View {
     }
 }
 
-/// A subscription's colour as a small dot; Gemini's is its four-colour spark.
+/// A subscription's shade as a small dot.
 struct ProviderDot: View {
     let id: ProviderID
     var size: CGFloat = 6
 
     var body: some View {
         Circle()
-            .fill(id == .gemini
-                ? AnyShapeStyle(AngularGradient(colors: ProviderID.Gemini.clockwise, center: .center))
-                : AnyShapeStyle(id.color))
+            .fill(id.color)
             .frame(width: size, height: size)
     }
 }
@@ -351,43 +334,14 @@ extension ProviderID {
         }
     }
 
-    /// One colour per subscription for dots, charts and tracks, taken from its logo. Codex follows
-    /// OpenAI's monochrome mark, so it is black in light mode and white in dark mode.
+    /// One shade of grey per subscription for dots and charts, so stacked bars stay apart without
+    /// colour.
     var color: Color {
         switch self {
-        case .claude: Color(red: 0.85, green: 0.47, blue: 0.34)
+        case .claude: .primary.opacity(0.5)
         case .codex: .primary
-        case .gemini: Gemini.blue
-        case .cursor: .gray
-        }
-    }
-
-    /// The Gemini spark's colours, clockwise from its top point.
-    enum Gemini {
-        static let red = Color(red: 0.97, green: 0.38, blue: 0.35)     // #F7615A
-        static let blue = Color(red: 0.24, green: 0.62, blue: 1.0)     // #3E9DFF
-        static let green = Color(red: 0.07, green: 0.76, blue: 0.49)   // #11C27C
-        static let yellow = Color(red: 0.96, green: 0.77, blue: 0.12)  // #F5C51F
-        static let clockwise = [red, blue, green, yellow, red]
-    }
-
-    /// Gemini's ring runs through its logo's colours, fixed in place like the spark: red at the
-    /// top, blue right, green bottom, yellow left. The others deepen towards the end of the arc.
-    func ringFill(fraction: Double) -> AnyShapeStyle {
-        switch self {
-        case .gemini:
-            AnyShapeStyle(AngularGradient(colors: Gemini.clockwise, center: .center))
-        default:
-            AnyShapeStyle(AngularGradient(
-                colors: [color.opacity(0.7), color], center: .center,
-                startAngle: .zero, endAngle: .degrees(360 * max(fraction, 0.01))))
-        }
-    }
-
-    var barFill: AnyShapeStyle {
-        switch self {
-        case .gemini: AnyShapeStyle(LinearGradient(colors: [Gemini.yellow, Gemini.green, Gemini.blue], startPoint: .leading, endPoint: .trailing))
-        default: AnyShapeStyle(LinearGradient(colors: [color.opacity(0.7), color], startPoint: .leading, endPoint: .trailing))
+        case .gemini: .primary.opacity(0.75)
+        case .cursor: .primary.opacity(0.3)
         }
     }
 }
@@ -410,54 +364,5 @@ enum PopoverSnapshotOptions {
         return lines.enumerated().map { i, l in
             UsageSummary.Line(name: names[i % names.count], tokens: l.tokens, cost: l.cost, byProvider: l.byProvider)
         }
-    }
-}
-
-// MARK: Incidents
-
-extension Incident.Severity {
-    /// Orange while a service limps along, red when it's down. Planned work stays grey.
-    var color: Color {
-        switch self {
-        case .maintenance: .secondary
-        case .degraded: .orange
-        case .partialOutage, .majorOutage: .red
-        }
-    }
-
-    var nsColor: NSColor {
-        switch self {
-        case .maintenance: .secondaryLabelColor
-        case .degraded: .systemOrange
-        case .partialOutage, .majorOutage: .systemRed
-        }
-    }
-}
-
-/// A status page's light: the mark for an Incident wherever it shows, the same dot the menu bar
-/// ring wears.
-struct StatusLight: View {
-    let severity: Incident.Severity
-    var size: CGFloat = 6
-
-    var body: some View {
-        Circle()
-            .fill(severity.color)
-            .frame(width: size, height: size)
-            .background(Circle().fill(severity.color.opacity(0.22)).frame(width: size * 2, height: size * 2))
-            .frame(width: size * 2, height: size * 2)
-            .accessibilityLabel(severity.label)
-    }
-}
-
-extension Incident {
-    /// "Partial outage in Claude Code and claude.ai".
-    var summary: String {
-        let names = components.map { $0.replacingOccurrences(of: #" \(.*\)$"#, with: "", options: .regularExpression) }
-        guard !names.isEmpty else { return severity.label }
-        let list = names.count <= 2
-            ? names.joined(separator: " and ")
-            : names.dropLast().joined(separator: ", ") + " and " + names.last!
-        return "\(severity.label) in \(list)"
     }
 }

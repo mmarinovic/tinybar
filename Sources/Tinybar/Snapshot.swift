@@ -19,40 +19,23 @@ enum PopoverSnapshot {
         else { fail("Output directory does not exist.") }
         let model = AppModel(settings: Settings())
         Task { @MainActor in
-            // `--incident claude:partialOutage` stands in for a status page reporting one.
-            if let i = args.firstIndex(of: "--incident"), i + 1 < args.count {
-                let parts = args[i + 1].split(separator: ":").map(String.init)
-                if let name = parts.first, let id = ProviderID(rawValue: name) {
-                    let severity: Incident.Severity = switch parts.count > 1 ? parts[1] : "" {
-                    case "degraded": .degraded
-                    case "majorOutage": .majorOutage
-                    case "maintenance": .maintenance
-                    default: .partialOutage
-                    }
-                    model.showForSnapshot(Incident(
-                        provider: id, title: "Elevated errors for Claude Opus 5.5", severity: severity,
-                        components: ["claude.ai", "Claude API (api.anthropic.com)", "Claude Code"],
-                        url: URL(string: "https://stspg.io/bzc81gbv1b99")!, updatedAt: Date().addingTimeInterval(-1800)))
-                }
-            }
-            // `--menubar` renders the status item's icon at 4x, with and without an incident light.
+            // `--menubar` renders the status item's icon at 4x on a light and a dark bar.
             if args.contains("--menubar") {
                 for dark in [false, true] {
-                    var row: [NSImage] = []
-                    for alert in [nil, NSColor.systemOrange, .systemRed] {
-                        row.append(RingIcon.image(fraction: 0.62, label: "62%", tint: RingIcon.tint(.claude), dark: dark, alert: alert))
-                        row.append(RingIcon.image(fraction: 0.62, label: nil, tint: nil, dark: dark, alert: alert))
-                    }
+                    let icon = MenuBarIcon.image()
                     let scale: CGFloat = 4, pad: CGFloat = 8
-                    let w = row.reduce(pad) { $0 + $1.size.width + pad }, h = (row.map(\.size.height).max() ?? 16) + 2 * pad
+                    let w = icon.size.width + 2 * pad, h = icon.size.height + 2 * pad
                     let canvas = NSImage(size: NSSize(width: w * scale, height: h * scale), flipped: false) { r in
                         (dark ? NSColor(white: 0.16, alpha: 1) : NSColor(white: 0.93, alpha: 1)).setFill()
                         r.fill()
-                        var x = pad
-                        for img in row {
-                            img.draw(in: NSRect(x: x * scale, y: pad * scale, width: img.size.width * scale, height: img.size.height * scale))
-                            x += img.size.width + pad
+                        let target = NSRect(x: pad * scale, y: pad * scale, width: icon.size.width * scale, height: icon.size.height * scale)
+                        let tinted = NSImage(size: target.size, flipped: false) { t in
+                            icon.draw(in: t)
+                            (dark ? NSColor.white : NSColor.black).set()
+                            t.fill(using: .sourceAtop)
+                            return true
                         }
+                        tinted.draw(in: target)
                         return true
                     }
                     guard let tiff = canvas.tiffRepresentation else { fail("Couldn't render the menu bar.") }
@@ -62,15 +45,7 @@ enum PopoverSnapshot {
                 exit(0)
             }
             await model.refresh(force: true)
-            // `--update 0.5.0[:preparing|:failed]` shows the update pill.
-            if let u = args.firstIndex(of: "--update"), u + 1 < args.count {
-                let parts = args[u + 1].split(separator: ":").map(String.init)
-                guard let version = parts.first else { exit(2) }
-                let r = Release(version: version, url: URL(string: "https://github.com/ThiloReintjes/tinybar/releases")!)
-                model.updater.showForSnapshot(parts.count < 2 ? .available(r)
-                    : parts[1] == "preparing" ? .preparing(r) : .failed(r, "Homebrew doesn't list \(version) yet."))
-            }
-            // `--stats [--range week|month|all] [--model <id>] [--page commands|models|languages|plans]`
+            // `--stats [--range week|month|all] [--model <id>] [--page commands|models|languages]`
             // renders a Stats card instead, as Copy image does.
             if args.contains("--stats") {
                 var range = StatsRange.month
@@ -103,7 +78,7 @@ enum PopoverSnapshot {
                 window.orderOut(nil)
                 guard let summary = await model.statsSummary(range, model: picked) else { fail("Couldn't load Stats.") }
                 for (scheme, suffix) in [(ColorScheme.dark, ".dark"), (.light, "")] {
-                    guard let image = StatsCard.image(summary, page: page, plans: model.plans, scheme: scheme), let tiff = image.tiffRepresentation
+                    guard let image = StatsCard.image(summary, page: page, scheme: scheme), let tiff = image.tiffRepresentation
                     else { fail("Couldn't render the Stats card.") }
                     write(NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]),
                           to: URL(fileURLWithPath: out.deletingPathExtension().path + suffix + ".png"))
@@ -113,7 +88,7 @@ enum PopoverSnapshot {
             // `--page claude` or `--page settings` renders that page instead of the overview.
             var page = Page.overview
             if let p = args.firstIndex(of: "--page"), p + 1 < args.count {
-                page = args[p + 1] == "settings" ? .settings : args[p + 1] == "about" ? .about : ProviderID(rawValue: args[p + 1]).map(Page.provider) ?? .overview
+                page = args[p + 1] == "settings" ? .settings : ProviderID(rawValue: args[p + 1]).map(Page.provider) ?? .overview
             }
             // `--backdrop` stands in for the worst case behind the glass: a bright window under a
             // dark popover, a dark one under a light popover.

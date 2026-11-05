@@ -11,7 +11,7 @@ Vocabulary: see [CONTEXT.md](./CONTEXT.md). Decisions: [docs/adr/](./docs/adr), 
 - Near-zero resource use (see §2).
 - Accurate Limit Windows, Resets and Banked Resets for Claude, Codex, Gemini and Cursor.
 - Daily token history and Theoretical Cost from local CLI logs.
-- Publishable: MIT license, notarized, auto-updating.
+- Publishable: MIT license, notarized.
 
 **Non-goals (v1)**
 - Providers other than Claude, Codex, Gemini and Cursor. Grok and Kimi come later, one at a time.
@@ -41,7 +41,7 @@ Known CodexBar pitfalls to avoid: full-corpus rescans (#2538), competing caches 
 - Swift, macOS 14+, universal binary (Apple Silicon is the priority for testing).
 - AppKit `NSStatusItem` plus a SwiftUI popover (`NSPopover`). Charts use Swift Charts.
 - Persistence uses the system SQLite (`libsqlite3`).
-- Plain SwiftPM, no dependencies (ADR 0002). Updates go through Homebrew (ADR 0007).
+- Plain SwiftPM, no dependencies (ADR 0002).
 - Launch at login via `SMAppService`, on by default.
 
 ## 4. Providers (v1)
@@ -97,18 +97,8 @@ Implementation note: endpoint shapes are undocumented. Verify request headers an
 
 ## 6. Menu bar
 
-- A tiny ring glyph showing how much of the Pinned Limit is **left**, in that Provider's colour (Claude orange, Gemini its spark, Codex and Cursor monochrome): full at 100%, empty at 0%, with the percentage next to it (`◕ 77%`). Settings has "hide percentage".
-- **Pinned Limit**: chosen by clicking any Limit Window on a Provider page; clicking it again unpins it. Unpinned, the menu bar shows **Auto**: of every Provider's account-wide windows, the one whose Run-out Time comes first before its Reset, else the one with the least left (ties: the earlier Reset). Stale Providers count only when no other is known. A pinned window that disappears falls back to Auto. Settings has "Show the limit closest to running out".
-- If the Pinned Limit's Provider is Stale, the glyph is dimmed.
-- **Incidents**: while any enabled Provider has an Incident that disrupts it (not maintenance), the ring wears a status light at its top right, cut out of the ring: orange when degraded, red for an outage. The tooltip names it. No animation.
-
-### Status pages
-Read on every poll and popover refresh (same throttle), without credentials, only for enabled Providers:
-- **Claude**: `status.claude.com/api/v2/summary.json` (statuspage.io). Counts the components `claude.ai`, `Claude API` and `Claude Code`; Console, Cowork and Government don't count.
-- **Codex**: `status.openai.com/proxy/status.openai.com` (incident.io), counting the components of the "Codex" group; when any is affected, `status.openai.com/api/v2/summary.json` supplies the incident's title (the open incident naming Codex, else the first open one with an impact).
-- **Cursor**: `status.cursor.com/api/v2/summary.json`, all components.
-- **Gemini**: none. Antigravity has no status page, and Google's Workspace feed (about 350 KB) covers the Gemini app instead.
-An unresolved incident counts when it names a counted component, or names none and has an impact. Its severity is the worst status among counted components (degraded, partial outage, major outage), else its impact. Maintenance in progress counts as maintenance. A page that can't be read keeps its last answer.
+- A fixed monochrome icon (two open rings, a template image the menu bar tints), with no numbers.
+  Clicking it opens the popover; everything else lives there.
 
 ## 7. Popover (344 × 540 pt, fixed; long pages scroll inside)
 
@@ -118,34 +108,32 @@ view, so switching never rebuilds or resizes anything. Long pages scroll inside.
 
 1. **Overview**:
    - One row per Provider: concentric rings (outer: longest account-wide window, inner: the next),
-     name, plan, the window closest to running out with its reset countdown (or, in orange, the
+     name, plan, the window closest to running out with its reset countdown (or, in bold, the
      earliest Run-out Time), and its % left.
-     Model-specific windows are left out. A Stale Provider shows "Login expired" (or the reason) in
-     orange; otherwise an Incident shows its status light and title in its colour, ahead of the
-     Run-out Time. Clicking a row opens its page.
+     Model-specific windows are left out. A Stale Provider shows "Login expired" (or the reason)
+     with a warning sign, ahead of the Run-out Time. Clicking a row opens its page.
    - Usage for all Providers (Today, 7d, 30d): total tokens, Theoretical Cost, a daily chart stacked
      by Provider, and top models and Projects, each bar split by Provider.
-   - Colours come from each logo: Claude orange, Codex monochrome (black or white), Gemini its
-     four-colour spark, Cursor grey.
+   - Black and white only. Rings and bars are ink on a faint track; charts tell Providers apart by
+     shade of grey (Codex ink, Gemini dark grey, Claude mid grey, Cursor light grey).
 2. **Provider page**:
    - Large rings with the tightest % left, name and plan.
-   - A banner per Incident: status light, title, severity and affected components, when it was
-     last updated and on which status page. Clicking it opens the incident.
    - A banner when Stale: what went wrong and what the user runs to fix it.
-   - Every Limit Window: bar, % left, reset time and countdown, and its Run-out Time: in orange if
-     it comes before the Reset, faint if after (the headroom). Click to pin; the pinned one is marked.
+   - Every Limit Window: % left, bar, reset time and countdown, and its Run-out Time: bold if it
+     comes before the Reset, faint if after (the headroom).
    - Extras: credits, Banked Resets, extra usage or on-demand spend.
    - That Provider's usage only: tokens, cost, chart, top models and Projects. Today is provisional.
-3. **Footer**: last check time (or the update pill, §11), check now (⌘R), Stats (⌘S, §13), how Tinybar counts (⌘I), settings
-   (⌘,), quit (⌘Q). "How Tinybar counts" is a page like Settings: where limits, tokens, API
-   prices and Stats come from, what stays on the Mac, and how much of the last 30 days' tokens
-   Activity was counted from when that is short of all.
+3. **Footer**: last check time, check now (⌘R), Stats (⌘S, §13), settings (⌘,), quit (⌘Q).
 
-**Settings** (replaces the page, back with Esc): Provider toggles, launch at login, notifications, the browser cookie fallback per Provider (off by default; enabling it may trigger a macOS Keychain prompt for the browser's storage key), hide percentage, and Auto for the menu bar. The running version sits at the bottom, next to a Report a bug link that opens the GitHub bug form with the version and macOS filled in.
+**Percentages**: a whole number with its sign at the same size and weight, monospaced digits,
+right-aligned in their column; bold below 20% left. Only an untouched window reads 100% and only
+a used-up one 0%. The app's name appears nowhere in the popover or the Stats window.
+
+**Settings** (replaces the page, back with Esc): Provider toggles, launch at login, notifications, and the browser cookie fallback per Provider (off by default; enabling it may trigger a macOS Keychain prompt for the browser's storage key).
 
 ### Run-out Time
 - Pace = % used ÷ time since the window started (Reset minus duration). Run-out Time = now + % left ÷ pace.
-- Always shown on the Provider page; only a Run-out Time before the Reset warns (orange, and on the
+- Always shown on the Provider page; only a Run-out Time before the Reset warns (bold, and on the
   Overview).
 - The window's own average needs no stored history and already includes the idle hours and nights
   that recur before the Reset.
@@ -212,13 +200,6 @@ Parsing rules must be verified against CodexBar's `Sources/CodexBarCore/Vendored
 - Releases are signed with Developer ID and notarized, so Gatekeeper opens them without asking.
   The release workflow stops if signing or notarization fails. Next: the official cask
   (`brew install --cask tinybar`).
-- **Updates** (ADR 0007): once a day, `GET api.github.com/repos/ThiloReintjes/tinybar/releases/latest`;
-  an hour after a check that got no answer, and right away when Tinybar's own version changes.
-  A newer version replaces the footer's check time with "Update to x.y.z" and is notified once
-  (with Limit Alerts' setting). Clicking it, for a Homebrew install: pull the tap, check the cask
-  lists that version, `brew fetch` it ("Updating…"), then hand over to a script that waits for
-  Tinybar to quit, runs `brew upgrade --cask thiloreintjes/tinybar/tinybar` and opens the app. On
-  failure the old version reopens with "Update failed"; clicking that copies the command. Other installs open the release page.
 - First run needs no configuration: auto-detect Providers, launch at login, request notification permission.
 
 ## 12. Later (explicitly deferred)
@@ -234,13 +215,14 @@ The window opens centered, remembers its position, and recenters saved positions
 screen. ⌘W closes it.
 
 **Layout**: fixed 960 × 600 cards under a title bar row with the pages (Overview, Commands,
-Models, Languages, Plans; ⌘1 to ⌘5, the last one remembered), the range (7 days, 30 days, All time) and
+Models, Languages; ⌘1 to ⌘4, the last one remembered), the range (7 days, 30 days, All time) and
 **Copy image**, which puts the current card on the clipboard at 2× in the current appearance. The
-tabs aren't part of the card. Each card opens with the Tinybar mark, name and (but for the
-overview) its page on the left and its date span on the right, and never shows project names. A
+tabs aren't part of the card. Each card opens with its page's name on the left and its date span
+on the right, and never shows the app's name or project names. Cards are black and white: Codex
+is ink, Claude a mid grey, and Languages take fixed shades of grey. A
 new page slides in from the side its tab sits on (a cross-fade with Reduce Motion).
 
-- **Tokens** in full digits, coloured by each Provider's share (Claude orange, Codex ink), with
+- **Tokens** in full digits, shaded by each Provider's share (Claude grey, Codex ink), with
   Theoretical Cost, the share legend and a bar chart. 7 and 30 days have a bar per day; All time
   picks the bar so the chart stays readable: a day up to 92 days, a week (Monday to Sunday) up to
   78 weeks, then a month. A caption says which.
@@ -266,8 +248,8 @@ light), average command length, non-zero exits, `git status` per `git commit`.
 Prompt, responses that run tools in parallel, lines added per Prompt and peak context.
 
 **Languages**: lines added as one number split by Provider; Languages by lines added, each in a
-fixed colour; what each model writes (its lines split by the six most written coloured
-Languages, the rest grey); file edits, lines removed, lines per edit and the most written
+fixed shade; what each model writes (its lines split by the six most written Languages in their
+shades, the rest light grey); file edits, lines removed, lines per edit and the most written
 Language.
 
 A model shows up in a ranking once it has enough data in the range: 10 Prompts, 50 responses,
@@ -333,15 +315,14 @@ dim. The copied image has no hover state.
 A database from a version without Activity is backfilled once, in the history import's child
 process: every log is re-read up to its saved offset for Activity only. Token totals and offsets
 are untouched. Activity from logs no longer on disk (deleted, or archived by the CLI) can't be
-recovered, so those sessions show tokens but no Activity; "How Tinybar counts" says how much of
-each Provider's tokens the counted logs hold. Codex compresses older sessions to `.jsonl.zst`,
+recovered, so those sessions show tokens but no Activity. Codex compresses older sessions to `.jsonl.zst`,
 which Tinybar doesn't read.
 
 0.2.0 kept Prompts, Tool Calls, lines, Agent Time and Compactions without their model. Its
 counters are cleared once (schema 4) and recounted the same way, per model. 0.3.0 had no Shell
 Commands, Languages or parallel counts; schema 5 clears and recounts once more.
 
-Schema 7 adds `limit_reading`.
+Schema 7 added `limit_reading` for a Plans page; schema 8 drops it with the page.
 
 Schema 6 (0.5.0) adds Context Bands. Claude's come at once from the message ids kept for
 de-duplication (90 days); Codex logs still on disk are re-read once, in the child process, up to
@@ -354,39 +335,3 @@ logged by Claude Code were counted from the largest value of each field across t
 copies, which counted cached context twice; stored totals from those days are not rewritten, but
 a message seen again is replaced by its complete copy.
 
-## 14. Plans (ADR 0008)
-
-A page of the Stats window, for Claude and Codex (Gemini and Cursor have no token logs). It turns
-each weekly Limit Window into API dollars, then compares the models. The range picker doesn't apply
-and hides.
-
-- **Reading**: after each ingest, a fresh snapshot's weekly account-wide window updates its
-  `limit_reading` row when its share rises, with the time of that reading. A Reset within an hour of
-  the stored one is the same window. A plan change marks the window. Only Tinybar's own polls are
-  read, so a user's history starts with this version.
-- **A window's value**: Theoretical Cost from its start (Reset minus duration) up to now while it's
-  open, or to its last reading once it's over, ÷ share used × 100. A day partly inside takes the
-  share of its tokens from `tokens.hour.HH`, per model, assuming tokens fall evenly in an hour.
-- **Full week**: the median of up to 8 windows on the current plan with at least 10% used and no
-  plan change. Below 10%, 1% steps are too coarse. Nothing is shown before one window qualifies.
-- **Per $1**: full week × 4.35 weeks ÷ the plan's list price in US dollars. Every window is assumed
-  used in full; Banked Resets and other extra resets aren't counted. A plan with no known price
-  drops this figure.
-- **Models**: a table bundled with the app holds each current model's Artificial Analysis
-  Intelligence Index score, cost per Benchmark Task and minutes per Benchmark Task, at maximum
-  effort, with the date it was copied. Tasks a week = full week ÷ cost per Benchmark Task, which
-  assumes the limit counts every model at its API price. Models are listed by score.
-- **Your use**: the last 7 days' Theoretical Cost, today included, as Usage's 7d shows it, and each
-  model's share of it. Per $1 at your pace = that × 4.35 ÷ the list price. A meter shows it against a
-  full week, full at or above one; going over can follow an early reset.
-- **Display**: a column per plan, then one comparison of every model. Each column has two large
-  numbers of equal weight, API usage per $1 at your pace and if you use it all (without a known
-  price, the last 7 days' and a full week's dollars); the meter; and, with a known price, the total
-  dollars of both. Below, the heading links to the index, with a plain list of each model's score and
-  tasks per week beside a chart of one against the other. The chart has score 20 to 60 up and tasks
-  across on a log scale fitted to the models. Marks are circles for Claude and squares for Codex,
-  filled when used in the last 7 days (5% or more) and outlined otherwise. Pointing at a row or a
-  mark shows the full figures and dims the rest. Estimates keep two significant figures, and a +
-  marks a figure with use that has no known price.
-- **How this is worked out**: a button at the bottom opens the workings, the assumptions and the
-  source in a popover. The copied image leaves it out.
